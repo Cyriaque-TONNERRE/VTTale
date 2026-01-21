@@ -115,7 +115,7 @@ cd VTTale
 
 ### Fat JAR
 
-The project is built as a **Single Fat JAR** for each platform (e.g., `vttale-hytale.jar`). This JAR encapsulates:
+The project is built as a **Single Fat JAR** for each platform (e.g., `VTTale.jar`). This JAR encapsulates:
 
 - The VTT Kernel
 - The Platform Adapter (Bootstrap)
@@ -129,7 +129,7 @@ The project is built as a **Single Fat JAR** for each platform (e.g., `vttale-hy
 
 Native game engine developers can extend VTTale by creating their own plugins:
 
-1. Add `vttale-api` as a compile-time dependency
+1. Add `api` as a compile-time dependency
 2. Implement the `Module` interface
 3. Register your module via the `VTTale` API at runtime
 4. Interact with the global `EventBus` and `Registry`
