@@ -38,7 +38,7 @@ hytale {
     includeDecompiledSources.set(true)
 
     manifest {
-        group = "dev.giopalma"
+        group = "org.vttale"
         name = "VTTale"
         version = project.version.toString() // Auto-syncs with project version
         description = "VTTale is a Virtual Tabletop platform for Hytale."
@@ -50,7 +50,7 @@ hytale {
         serverVersion = "*"
 
         // Plugin-specific
-        main = "dev.giopalma.vttale.platform.hytale.VTTaleHytalePlugin"
+        main = "org.vttale.vttale.platform.hytale.VTTaleHytalePlugin"
         includesAssetPack = true
         disabledByDefault = false
     }
