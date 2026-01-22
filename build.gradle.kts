@@ -2,7 +2,7 @@ plugins {
     id("java")
 }
 
-group = "dev.giopalma.vttale"
+group = "org.vttale.vttale"
 version = "1.0-SNAPSHOT"
 
 subprojects {
