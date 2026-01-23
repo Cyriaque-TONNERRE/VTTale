@@ -104,7 +104,7 @@ Modules are discovered via Java's SPI (`META-INF/services`).
 
 ### 6.2 Event Routing (`EventContext`)
 Every event includes an `EventContext` containing:
-- `senderId`: The UUID of the player or "CONSOLE".
+- `senderId`: The UUID of the player, "CONSOLE", or "KERNEL" (for kernel-originated events).
 - This allows platform adapters to route responses back to the correct originator.
 
 ---
