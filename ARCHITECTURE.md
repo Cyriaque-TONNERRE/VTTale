@@ -102,28 +102,29 @@ Because modules and adapters load at different times, VTTale uses a "Catch-Up" p
 
 ### 6.1 Module Lifecycle and Discovery
 
-VTTale distinguishes between **Discovery** (finding the code) and **Lifecycle** (executing the code).
+VTTale distinguishes between **Discovery** (locating code) and **Lifecycle** (executing code).
 
-#### Phase 1: Discovery (Java SPI)
+#### Phase 1: Discovery
 
-The Kernel uses `java.util.ServiceLoader` to scan the classpath for implementations of the `Module` interface. This happens once during system bootstrap.
+Modules can be introduced to the system in two ways:
 
-- **Requirement**: A module must provide a provider-configuration file in the JAR.
-- **Path**: `src/main/resources/META-INF/services/org.vttale.vttale.api.module.Module`
-- **Content**: The fully qualified name of the implementation class (e.g., `org.vttale.vttale.module.diceroll.DiceRollModule`).
+1. **Automatic Discovery (Java SPI)**: The preferred method for decoupled feature modules. The Kernel uses `java.util.ServiceLoader` to scan for `Module` implementations.
+   - **Path**: `src/main/resources/META-INF/services/org.vttale.vttale.api.module.Module`
+   - **Content**: Fully qualified implementation name (e.g., `org.vttale.vttale.module.diceroll.DiceRollModule`).
+
+2. **Manual Registration**: Used when programmatic control is required, such as Platform Adapters injecting themselves into the kernel.
+   - **Code Reference**: See `VTTaleHytalePlugin.java` for an implementation of `VTTale.getKernel().getModuleRegistry().registerModule(...)`.
 
 #### Phase 2: Lifecycle Execution
 
-Once discovered, the Kernel manages the module's state via two primary methods:
+Regardless of how they are introduced, all modules follow the same managed lifecycle:
 
-- **`onEnable(Kernel kernel)`**: This is the mandatory entry point.
-  - **Purpose**: Bridge the module logic to the system.
-  - **Standard Actions**: Register commands in the `CommandRegistry`, subscribe to events on the `EventBus`, and initialize internal state/database connections.
-- **`onDisable()`**: The cleanup hook.
-  - **Purpose**: Graceful shutdown.
-  - **Standard Actions**: Unsubscribe from events (to prevent memory leaks), close open files, or save pending state.
+- **`onEnable(Kernel kernel)`**: Mandatory entry point.
+  - **Standard Actions**: Register commands in the `CommandRegistry`, subscribe to events on the `EventBus`, and initialize state.
+- **`onDisable()`**: Cleanup hook.
+  - **Standard Actions**: Unregister listeners to prevent memory leaks and close resources.
 
-#### Concrete Example
+#### Example (Automatic Discovery)
 
 ```java
 // 1. Implement the Module interface
@@ -131,20 +132,15 @@ public class MyFeatureModule implements Module {
 
     @Override
     public void onEnable(Kernel kernel) {
-        // Registering a command that the platform can expose
+        // Registering a command
         kernel.getCommandRegistry().registerCommand("myfeat", "Description");
 
-        // Subscribing to events to handle logic
+        // Handling logic via events
         kernel.getEventBus().subscribe(CommandExecutedEvent.class, (event, context) -> {
             if (event.getCommandName().equals("myfeat")) {
-                // Logic goes here
+                // Feature logic
             }
         });
-    }
-
-    @Override
-    public void onDisable() {
-        // Cleanup logic if needed
     }
 }
 ```
