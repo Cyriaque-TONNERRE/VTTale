@@ -43,7 +43,7 @@ VTTale utilizes a **Micro-kernel / Plug-in Based / Hexagonal** architecture. The
 - **Purpose**: Implements the core services and manages the plugin lifecycle.
 - **Key Responsibilities**:
     - **Service Discovery**: Uses `ServiceLoader` to find and load `Module` implementations.
-    - **Event Dispatching**: Implements a `SimpleEventBus` using `ConcurrentHashMap` and thread-safe listeners.
+    - **Event Dispatching**: Provides a thread-safe implementation of `EventBus`
     - **Command Management**: Provides a centralized `SimpleCommandRegistry`.
 - **Patterns**: Micro-kernel, Service Locator (via SPI), Singleton (exposed via `VTTale` class).
 
