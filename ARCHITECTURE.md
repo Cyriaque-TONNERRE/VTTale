@@ -35,7 +35,7 @@ VTTale utilizes a **Micro-kernel / Plug-in Based / Hexagonal** architecture. The
 - **Purpose**: Defines the "Contract" for the entire system.
 - **Key Responsibilities**:
     - Providing core interfaces: `Kernel`, `EventBus`, `Module`, `CommandRegistry`.
-    - Defining standard events: `CommandExecutedEvent`, `SendMessageEvent`.
+    - Defining standard events: `CommandExecutedEvent`, `RegisterCommandRequest`.
     - Routing metadata: `EventContext`.
 - **Patterns**: Interface Segregation, Observer (interfaces), Context Object.
 
