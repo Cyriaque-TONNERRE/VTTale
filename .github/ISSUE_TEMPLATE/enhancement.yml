@@ -1,5 +1,5 @@
 name: Enhancement / Suggestion
-description: Report a bug you found in VTTale
+description: Suggest an enhancement or new feature for VTTale
 body:
   - type: markdown
     attributes:
