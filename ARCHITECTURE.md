@@ -1,120 +1,203 @@
-# VTT Project Architecture
+# Project Architecture Blueprint: VTTale
 
-## Overview
+This document provides a comprehensive overview of the VTTale architectural framework, documenting its design principles, core components, and implementation patterns. VTTale is an extensible, platform-agnostic, "headless" Virtual Tabletop (VTT) engine designed to integrate seamlessly into host game engines.
 
-A system-agnostic Virtual Tabletop (VTT) core designed to run "headless" inside other game engines (Hytale, Minecraft).
+## 1. Architectural Overview
 
-**Inspired by [FoundryVTT](https://foundryvtt.com/):** VTTale follows architectural patterns similar to FoundryVTT, including:
+VTTale utilizes a **Micro-kernel / Plug-in Based / Hexagonal** architecture. The design is heavily inspired by FoundryVTT but adapted for a headless, Java-based environment.
 
-- **Hook-based Event System**: Like FoundryVTT's `Hooks.on()` / `Hooks.call()`, VTTale uses a typed EventBus for inter-module communication
-- **Modular Architecture**: Modules can extend functionality without modifying core code
-- **Game System Abstraction**: Support for multiple game systems (D&D 5e, Pathfinder, etc.) via separate modules
-- **Dynamic Command Registration**: Commands are registered at runtime, not hardcoded
+### Core Principles:
 
-Key differences from FoundryVTT:
+- **Platform Agnosticism**: The core engine is decoupled from any specific game engine, interacting through adapters.
+- **Strict Dependency Flow**: Dependencies flow towards the `api` module, ensuring a clean separation of concerns.
+- **Event-Driven Communication**: Components interact asynchronously and loosely via a type-safe event bus.
+- **Modular Extensibility**: New features and game systems are added as self-contained modules discovered via Java SPI.
 
-- **Headless**: No UI layer, runs inside game engines as a plugin
-- **Java-based**: Uses Java SPI for module discovery instead of JavaScript
-- **Platform Agnostic**: Designed to work across multiple game engines via Adapters
+---
 
-## Tech Stack
+## 2. Architecture Visualization (C4 Model)
 
-- **Language:** Java
-- **Build System:** Gradle (Multi-module)
-- **Architecture:** Micro-kernel / Plug-in Based / Hexagonal (inspired by FoundryVTT)
-- **Distribution:** Fat JAR (All-in-one platform plugin)
+### Level 1: System Context
 
-## Module Structure & Dependencies
+- **VTTale Core**: The headless engine managing rules, dice, and state.
+- **Platform (e.g., Hytale)**: The host game engine providing the UI, world, and networking.
+- **User (Player/GM)**: Interacts with VTTale through the host game's chat and command systems.
 
-The strictly enforced dependency flow is: `platform` -> `api` <- `kernel`.
+### Level 2: Containers (Modules)
 
-1. **`api` (SDK)**
-   - The "Contract". Contains Interfaces (`Module`, `EventBus`, `CommandProvider`) and Data Classes.
-   - This is the only module third-party developers should depend on.
-   - _Dependencies:_ None.
+- **API**: The shared contract defining interfaces and data structures.
+- **Kernel**: The execution engine managing lifecycle and communication.
+- **Modules/GameSystems**: Plugins implementing specific features or RPG rules.
+- **Adapters**: Bridges translating host game events into VTTale events.
 
-2. **`kernel` (Core)**
-   - The "Runner". Manages Module Lifecycle and Event Bus implementation.
-   - Discovered at runtime via Java SPI (`ServiceLoader`).
-   - _Dependencies:_ `api`.
+---
 
-3. **`module` (Core Features) & `gamesystem` (Rulesets)**
-   - **`module`**: Generic features like `chat`, `diceroll`.
-   - **`gamesystem`**: Specific game systems like `dnd5e`.
-   - Built-in logic included in the main distribution.
-   - _Dependencies:_ `api`.
+## 3. Core Architectural Components
 
-4. **`platform` (e.g., `hytale`, `minecraft`)**
-   - The bridge. Translates Game Engine events into VTT Events.
-   - This module acts as the entry point and bundles everything into a single distribution JAR.
-   - _Dependencies:_ `api`, `kernel` (runtime), `module` (runtime), `Game Engine SDK`.
+### 3.1 API Module (`org.vttale.vttale.api`)
 
-## Distribution & Extensibility
+- **Purpose**: Defines the "Contract" for the entire system.
+- **Key Responsibilities**:
+  - Providing core interfaces: `Kernel`, `EventBus`, `Module`, `CommandRegistry`.
+  - Defining standard events: `CommandExecutedEvent`, `RegisterCommandRequest`.
+  - Routing metadata: `EventContext`.
+- **Patterns**: Interface Segregation, Observer (interfaces), Context Object.
 
-### 1. The Platform Plugin (Fat JAR)
+### 3.2 Kernel Module (`org.vttale.vttale.kernel`)
 
-The project is built as a **Single Fat JAR** for a specific platform (e.g., `vttale-hytale.jar`). This JAR encapsulates:
+- **Purpose**: Implements the core services and manages the plugin lifecycle.
+- **Key Responsibilities**:
+  - **Service Discovery**: Uses `ServiceLoader` to find and load `Module` implementations.
+  - **Event Dispatching**: Provides a thread-safe implementation of `EventBus`
+  - **Command Management**: Provides a centralized `SimpleCommandRegistry`.
+- **Patterns**: Micro-kernel, Service Locator (via SPI), Singleton (exposed via `VTTale` class).
 
-- The VTT Kernel.
-- The Platform Adapter (Bootstrap).
-- All built-in Modules and Game Systems.
+### 3.3 Platform Adapters (`org.vttale.vttale.platform.*`)
 
-### 2. Third-Party Extensions
+- **Purpose**: Bridges the gap between VTTale and specific game engines.
+- **Key Responsibilities**:
+  - Bootstrapping the VTTale kernel.
+  - Mapping native game commands to VTTale's `CommandExecutedEvent`.
+  - Handling `PlatformBroadcastEvent` to display messages in the game's UI.
+  - Implementing game-specific logic (e.g., Hytale pathfinding, entity management).
+- **Patterns**: Adapter, Facade.
 
-Native game engine developers can extend VTTale by creating their own plugins:
+---
 
-1. They add `vttale-api` as a compile-time dependency.
-2. They implement the `Module` interface.
-3. They register their module via the `VTTale` API at runtime.
-4. Since VTTale runs in the same JVM, they can interact with the global `EventBus` and `Registry`.
+## 4. Architectural Layers and Dependencies
 
-## Key Design Patterns
+The dependency graph is strictly hierarchical to prevent leaks and circularities:
 
-### 1. Type-Safe Event Bus
-
-Communication happens via a typed Event Bus located in `kernel`.
-
-- **Subscribe:** `bus.subscribe(MyEvent.class, (evt, ctx) -> ...)`
-- **Publish:** `bus.publish(new MyEvent(), context)`
-
-### 2. Event Context & Routing
-
-Every event travels with an `EventContext` object containing the `SenderID` (UUID) and `SourceAdapter`. This allows the Adapter to route responses back to the correct user in the game world.
-
-### 3. Dynamic Command Registry
-
-Adapters do not hardcode commands. Commands are registered dynamically at runtime:
-
-1. Module calls `kernel.getCommandRegistry().registerCommand("roll", "description")`.
-2. Kernel stores the command in an internal registry AND publishes a `RegisterCommandRequest` event.
-3. Platform Adapter subscribes to this request and registers it in the Game Engine.
-4. When executed, Adapter publishes `CommandExecutedEvent` back to the bus.
-
-**Catch-Up Pattern:** Unlike FoundryVTT which uses ordered lifecycle hooks (`init` → `setup` → `ready`), VTTale modules are loaded via Java SPI before the Platform Adapter is registered. To solve this timing issue:
-
-- `CommandRegistry` maintains a `Map<String, String>` of all registered commands
-- When an Adapter's `onEnable()` is called, it uses `getRegisteredCommands()` to catch up on commands registered before it was active
-- This ensures no commands are lost due to registration order
-
-```java
-// In HytaleAdapter.onEnable():
-// 1. Subscribe to future commands
-kernel.getEventBus().subscribe(RegisterCommandRequest.class, this::registerHytaleCommand);
-
-// 2. Catch up on already-registered commands
-kernel.getCommandRegistry().getRegisteredCommands().forEach((name, desc) -> {
-    registerHytaleCommand(new RegisterCommandRequest(name, desc), context);
-});
+```mermaid
+graph TD
+    Platform[Platform Adapter: hytale] --> API
+    Platform --> Kernel
+    Module[Modules: chat, diceroll] --> API
+    GameSystem[GameSystem: dnd5e] --> API
+    Kernel --> API
 ```
 
-## FoundryVTT Comparison
+---
 
-| Aspect               | FoundryVTT                       | VTTale                                        |
-| -------------------- | -------------------------------- | --------------------------------------------- |
-| **Language**         | JavaScript                       | Java                                          |
-| **Event System**     | `Hooks.on()` / `Hooks.call()`    | `EventBus.subscribe()` / `EventBus.publish()` |
-| **Module Discovery** | JSON manifest + script loading   | Java SPI (`ServiceLoader`)                    |
-| **Lifecycle**        | `init` → `setup` → `ready` hooks | Immediate via SPI + catch-up pattern          |
-| **UI**               | Full web-based UI                | Headless (uses host game's UI)                |
-| **Extensibility**    | Modules & Systems                | Modules, Game Systems & Platform Adapters     |
-| **Chat Commands**    | `CONFIG.ChatMessage.commands`    | Dynamic `CommandRegistry`                     |
+## 5. Service Communication Patterns
+
+### 5.1 Type-Safe Event Bus
+
+Communication occurs via the `EventBus`. Modules never call each other directly.
+
+- **Publishing**: `kernel.getEventBus().publish(event, context)`
+- **Subscribing**: `kernel.getEventBus().subscribe(EventType.class, (event, context) -> { ... })`
+
+### 5.2 Dynamic Command Registration (Catch-Up Pattern)
+
+Because modules and adapters load at different times, VTTale uses a "Catch-Up" pattern:
+
+1. **Registration**: Modules register commands in `CommandRegistry`.
+2. **Notification**: Kernel publishes `RegisterCommandRequest`.
+3. **Catch-Up**: When an adapter enables, it reads `getRegisteredCommands()` to register anything it missed and then listens for future requests.
+
+---
+
+## 6. Implementation Patterns
+
+### 6.1 Module Lifecycle and Discovery
+
+VTTale distinguishes between **Discovery** (locating code) and **Lifecycle** (executing code).
+
+#### Phase 1: Discovery
+
+Modules can be introduced to the system in two ways:
+
+1. **Automatic Discovery (Java SPI)**: The preferred method for decoupled feature modules. The Kernel uses `java.util.ServiceLoader` to scan for `Module` implementations.
+   - **Path**: `src/main/resources/META-INF/services/org.vttale.vttale.api.module.Module`
+   - **Content**: Fully qualified implementation name (e.g., `org.vttale.vttale.module.diceroll.DiceRollModule`).
+
+2. **Manual Registration**: Used when programmatic control is required, such as Platform Adapters injecting themselves into the kernel.
+   - **Code Reference**: See `VTTaleHytalePlugin.java` for an implementation of `VTTale.getKernel().getModuleRegistry().registerModule(...)`.
+
+#### Phase 2: Lifecycle Execution
+
+Regardless of how they are introduced, all modules follow the same managed lifecycle:
+
+- **`onEnable(Kernel kernel)`**: Mandatory entry point.
+  - **Standard Actions**: Register commands in the `CommandRegistry`, subscribe to events on the `EventBus`, and initialize state.
+- **`onDisable()`**: Cleanup hook.
+  - **Standard Actions**: Unregister listeners to prevent memory leaks and close resources.
+
+#### Example (Automatic Discovery)
+
+```java
+// 1. Implement the Module interface
+public class MyFeatureModule implements Module {
+
+    @Override
+    public void onEnable(Kernel kernel) {
+        // Registering a command
+        kernel.getCommandRegistry().registerCommand("myfeat", "Description");
+
+        // Handling logic via events
+        kernel.getEventBus().subscribe(CommandExecutedEvent.class, (event, context) -> {
+            if (event.getCommandName().equals("myfeat")) {
+                // Feature logic
+            }
+        });
+    }
+}
+```
+
+```text
+# 2. Register in META-INF/services/org.vttale.vttale.api.module.Module
+org.vttale.vttale.module.myfeature.MyFeatureModule
+```
+
+### 6.2 Event Routing (`EventContext`)
+
+Every event includes an `EventContext` containing:
+
+- `senderId`: The UUID of the player, "CONSOLE", or "KERNEL" (for kernel-originated events).
+- This allows platform adapters to route responses back to the correct originator.
+
+---
+
+## 7. Extensions and Evolution
+
+### Adding a New Feature
+
+1. Create a new module or system.
+2. Implement the `Module` interface.
+3. Register the class in `META-INF/services/org.vttale.vttale.api.module.Module`.
+4. Register your commands and subscribe to your events in `onEnable`.
+
+### Adding a New Platform
+
+1. Create a new platform adapter.
+2. Bootstrap VTTale in the engine's initialization hook.
+3. Subscribe to `RegisterCommandRequest` to map VTTale commands to the engine's command system.
+4. Subscribe to `PlatformBroadcastEvent` to map VTTale messages to the engine's chat system.
+
+---
+
+## 8. Architectural Decision Records (ADR)
+
+### ADR 001: Java SPI for Module Discovery
+
+- **Decision**: Use `java.util.ServiceLoader` instead of a custom JSON manifest system.
+- **Rationale**: Leverages standard Java mechanisms, simplifies classpath handling, and provides type-safety during loading.
+- **Consequence**: Modules must provide a service file in `META-INF`.
+
+### ADR 002: Headless Architecture
+
+- **Decision**: Decouple the UI entirely from the VTT core.
+- **Rationale**: Allows VTTale to run in various engines with radically different UI systems (2D, 3D, chat-only).
+- **Consequence**: All visual elements must be handled by platform adapters.
+
+### ADR 003: Simple Event Bus
+
+- **Decision**: Use a synchronous, thread-safe implementation of an event bus.
+- **Rationale**: Keeps implementation simple while allowing for asynchronous execution if handlers choose to spawn tasks.
+- **Consequence**: Handlers should avoid blocking the bus if possible.
+
+---
+
+_Generated on: 2026-01-23_
+_Architectural Blueprint Version: 1.0.0_
