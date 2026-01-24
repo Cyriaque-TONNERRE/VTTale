@@ -12,6 +12,8 @@ build/
 *.iws
 *.iml
 *.ipr
+.idea/go.imports.xml
+.idea/jsonSchemas.xml
 out/
 !**/src/main/**/out/
 !**/src/test/**/out/
