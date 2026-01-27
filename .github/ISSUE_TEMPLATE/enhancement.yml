@@ -1,0 +1,28 @@
+name: Enhancement / Suggestion
+description: Suggest an enhancement or new feature for VTTale
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please fill out the fields below.
+        
+        Thank you for helping us improve VTTale!
+  - type: textarea
+    attributes:
+      label: Description
+      description: |
+        Describe the enhancement, what it does, and why it should be implemented.
+        Also, is this a replacement for another feature?
+        If so, in what ways does this enhancement improve upon it?
+      render: markdown
+    validations:
+      required: true
+  - type: dropdown
+    attributes:
+      label: Size Estimate
+      description: |
+        About how big of a feature is this?
+      options:
+        - Small
+        - Medium
+        - Large

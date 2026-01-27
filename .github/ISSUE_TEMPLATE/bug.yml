@@ -1,0 +1,64 @@
+name: Bug Report
+description: Report a bug you found in VTTale
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Requirements
+        Please ensure you are using a supported version of VTTale before reporting a bug.
+        See our documentation for supported versions and troubleshooting tips.
+        
+        Your report may be closed without notice if these requirements are not met.
+        With notice, we may close your issue as duplicate or invalid (not reproducible or incomplete).
+        
+        Thank you for helping us improve VTTale!
+  - type: textarea
+    attributes:
+      label: Version
+      description: |
+        Please provide the version of VTTale you are using.
+        Steps to retrieve this will be included in the future.
+        Please be verbose - do not provide "latest" or "latest version".
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Description
+      description: |
+        Describe the bug in detail.
+        Provide any relevant error messages or screenshots.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Expected behavior
+      description: |
+        What should have happened instead?
+      render: markdown
+    validations:
+      required: false
+  - type: textarea
+    attributes:
+      label: Reproduction
+      description: |
+        How can we reproduce this bug?
+        This is important so we can explore the issue and ensure we fix it.
+      render: markdown
+    validations:
+      required: true
+  - type: textarea
+    attributes:
+      label: Additional Info
+      description: |
+        If there is any additional information that is useful but does not fit above, please let us know!
+      render: markdown
+    validations:
+      required: false
+  - type: checkboxes
+    attributes:
+      label: Acknowledgements
+      options:
+        - label: I have read and fulfilled the requirements for reporting bugs
+          required: true
