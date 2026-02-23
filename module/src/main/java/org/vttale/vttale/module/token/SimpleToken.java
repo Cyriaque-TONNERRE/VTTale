@@ -1,4 +1,4 @@
-package org.vttale.vttale.kernel.token;
+package org.vttale.vttale.module.token;
 
 import org.vttale.vttale.api.token.Token;
 import org.vttale.vttale.api.token.TokenComponent;
@@ -6,7 +6,7 @@ import org.vttale.vttale.api.token.TokenPosition;
 import org.vttale.vttale.api.token.TokenType;
 import org.vttale.vttale.api.token.behavior.Behavior;
 import org.vttale.vttale.api.token.behavior.BehaviorContext;
-import org.vttale.vttale.kernel.token.behavior.SimpleBehaviorContext;
+import org.vttale.vttale.module.token.behavior.SimpleBehaviorContext;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;

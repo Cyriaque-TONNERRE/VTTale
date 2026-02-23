@@ -5,23 +5,20 @@ import org.vttale.vttale.api.command.CommandRegistry;
 import org.vttale.vttale.api.events.EventBus;
 import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.module.ModuleRegistry;
-import org.vttale.vttale.api.token.TokenRegistry;
-import org.vttale.vttale.api.token.behavior.BehaviorDispatcher;
 import org.vttale.vttale.kernel.command.SimpleCommandRegistry;
 import org.vttale.vttale.kernel.events.SimpleEventBus;
 import org.vttale.vttale.kernel.module.SimpleModuleRegistry;
-import org.vttale.vttale.kernel.token.SimpleTokenRegistry;
-import org.vttale.vttale.kernel.token.behavior.SimpleBehaviorDispatcher;
 
+import java.util.Map;
 import java.util.ServiceLoader;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class VTTaleKernel implements Kernel {
 
     private final EventBus eventBus;
     private final CommandRegistry commandRegistry;
     private final ModuleRegistry moduleRegistry;
-    private final TokenRegistry tokenRegistry;
-    private final BehaviorDispatcher behaviorDispatcher;
+    private final Map<Class<?>, Object> services = new ConcurrentHashMap<>();
 
     /**
      * Initializes registries; registers modules via service provider
@@ -30,8 +27,6 @@ public class VTTaleKernel implements Kernel {
         this.eventBus = new SimpleEventBus();
         this.commandRegistry = new SimpleCommandRegistry(eventBus);
         this.moduleRegistry = new SimpleModuleRegistry(this);
-        this.tokenRegistry = new SimpleTokenRegistry(this);
-        this.behaviorDispatcher = new SimpleBehaviorDispatcher(tokenRegistry);
 
         // Auto-discover and register modules via SPI
         ServiceLoader<Module> loader = ServiceLoader.load(Module.class);
@@ -54,12 +49,12 @@ public class VTTaleKernel implements Kernel {
     }
 
     @Override
-    public TokenRegistry getTokenRegistry() {
-        return tokenRegistry;
+    public <T> T getService(Class<T> serviceClass) {
+        return serviceClass.cast(services.get(serviceClass));
     }
 
     @Override
-    public BehaviorDispatcher getBehaviorDispatcher() {
-        return behaviorDispatcher;
+    public <T> void registerService(Class<T> serviceClass, T service) {
+        services.put(serviceClass, service);
     }
 }

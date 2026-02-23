@@ -1,4 +1,4 @@
-package org.vttale.vttale.kernel.token.behavior;
+package org.vttale.vttale.module.token.behavior;
 
 import org.vttale.vttale.api.token.Token;
 import org.vttale.vttale.api.token.TokenRegistry;

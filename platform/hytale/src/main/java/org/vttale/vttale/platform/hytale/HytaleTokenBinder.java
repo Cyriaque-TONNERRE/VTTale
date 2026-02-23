@@ -58,7 +58,7 @@ public class HytaleTokenBinder {
      */
     public HytaleTokenBinder(Kernel kernel, JavaPlugin plugin) {
         this.kernel = kernel;
-        this.tokenRegistry = kernel.getTokenRegistry();
+        this.tokenRegistry = kernel.getService(TokenRegistry.class);
         this.plugin = plugin;
     }
 

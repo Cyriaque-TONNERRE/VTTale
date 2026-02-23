@@ -11,11 +11,11 @@ import java.util.Collection;
  * behaviors attached to tokens. Plugins use this to trigger behavior
  * reactions when game events occur.
  * <p>
- * Access via: VTTale.getKernel().getBehaviorDispatcher()
+ * Access via: VTTale.getKernel().getService(BehaviorDispatcher.class)
  * <p>
  * Example - Dispatching a damage event:
  * <pre>{@code
- * BehaviorDispatcher dispatcher = kernel.getBehaviorDispatcher();
+ * BehaviorDispatcher dispatcher = kernel.getService(BehaviorDispatcher.class);
  *
  * DamageEvent event = new DamageEvent(target, source, 15, "fire");
  *

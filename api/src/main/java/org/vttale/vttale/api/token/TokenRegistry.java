@@ -12,7 +12,7 @@ import java.util.function.Predicate;
  * It handles token lifecycle (create, read, update, delete) and provides
  * powerful query capabilities for game systems.
  * <p>
- * Access via: VTTale.getKernel().getTokenRegistry()
+ * Access via: VTTale.getKernel().getService(TokenRegistry.class)
  * <p>
  * Events:
  * The registry publishes events via the EventBus for all token changes:<br />

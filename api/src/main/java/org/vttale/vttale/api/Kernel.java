@@ -3,18 +3,17 @@ package org.vttale.vttale.api;
 import org.vttale.vttale.api.command.CommandRegistry;
 import org.vttale.vttale.api.events.EventBus;
 import org.vttale.vttale.api.module.ModuleRegistry;
-import org.vttale.vttale.api.token.TokenRegistry;
-import org.vttale.vttale.api.token.behavior.BehaviorDispatcher;
 
 /**
  * The central service container for the VTTale system.
  * <p>
- * The Kernel provides access to core services such as :<br />
+ * The Kernel provides access to core services such as:<br />
  * - {@link EventBus} for publish/subscribe event communication,<br />
  * - {@link CommandRegistry} for registering VTT commands,<br />
- * - {@link ModuleRegistry} for managing module lifecycle,<br />
- * - {@link TokenRegistry} for managing tokens,<br />
- * - {@link BehaviorDispatcher} for dispatching events to token behaviors.
+ * - {@link ModuleRegistry} for managing module lifecycle.
+ * <p>
+ * Other capabilities (e.g., token management, behavior dispatching, etc.)
+ * are provided by modules and exposed via {@code getService(Class)}.
  * <p>
  * It acts as the main entry point for modules to interact with the VTT infrastructure.
  * @see VTTale#getKernel()
@@ -43,18 +42,21 @@ public interface Kernel {
     ModuleRegistry getModuleRegistry();
 
     /**
-     * Returns the token registry for managing tokens.
+     * Returns a service by its class.
      *
-     * @return the token registry instance
+     * @param serviceClass the class of the service to return
+     * @param <T> the type of the service
+     * @return the service instance, or null if not registered
      */
-    TokenRegistry getTokenRegistry();
+    <T> T getService(Class<T> serviceClass);
 
     /**
-     * Returns the behavior dispatcher for sending events to token behaviors.
-     * <p>
-     * Use this to trigger behavior reactions when game events occur.
+     * Registers a service.
      *
-     * @return the behavior dispatcher
+     * @param serviceClass the class to register the service under
+     * @param service the service instance
+     * @param <T> the type of the service
      */
-    BehaviorDispatcher getBehaviorDispatcher();
+    <T> void registerService(Class<T> serviceClass, T service);
+
 }

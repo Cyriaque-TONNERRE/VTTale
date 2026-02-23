@@ -1,4 +1,4 @@
-package org.vttale.vttale.kernel.token;
+package org.vttale.vttale.module.token;
 
 import org.vttale.vttale.api.Kernel;
 import org.vttale.vttale.api.events.Event;
