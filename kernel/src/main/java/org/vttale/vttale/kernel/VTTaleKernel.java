@@ -20,8 +20,8 @@ public class VTTaleKernel implements Kernel {
 
     /**
      * Initializes registries. Modules are registered explicitly by the
-     * platform (no SPI): built-in modules in the platform setup(), third
-     * -party modules from their own plugin setup().
+     * platform (no SPI): built-in modules in the platform setup(), third-party
+     * modules from their own plugin setup().
      */
     public VTTaleKernel() {
         this.eventBus = new SimpleEventBus();

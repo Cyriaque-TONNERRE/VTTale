@@ -25,7 +25,7 @@ import java.util.UUID;
  * Example:
  * <pre>{@code
  * eventBus.subscribe(TokenUpdatedEvent.class, (event, ctx) -> {
- *     if (event.getUpdateType() == UpdateType.COMPONENT_CHANGED) {
+ *     if (event.getUpdateType() == UpdateType.COMPONENT_UPDATED) {
  *         String componentId = event.getComponentId().orElse("unknown");
  *         logger.info("Component {} changed on token {}",
  *                     componentId, event.getToken().getName());

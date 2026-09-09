@@ -53,12 +53,13 @@ public class HytaleTokenBinder {
     /**
      * Creates a new HytaleTokenBinder.
      *
-     * @param kernel the VTTale kernel
-     * @param plugin the Hytale plugin instance
+     * @param kernel        the VTTale kernel
+     * @param tokenRegistry the token service (the caller resolved it; may not be null)
+     * @param plugin        the Hytale plugin instance
      */
-    public HytaleTokenBinder(Kernel kernel, JavaPlugin plugin) {
+    public HytaleTokenBinder(Kernel kernel, TokenRegistry tokenRegistry, JavaPlugin plugin) {
         this.kernel = kernel;
-        this.tokenRegistry = kernel.getService(TokenRegistry.class);
+        this.tokenRegistry = tokenRegistry;
         this.plugin = plugin;
     }
 
