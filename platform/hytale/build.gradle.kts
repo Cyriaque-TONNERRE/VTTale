@@ -1,7 +1,39 @@
 plugins {
-    id("fr.smolder.hytale.dev") version "0.0.10"
+    id("com.azuredoom.hytale-tools") version "1.+"
+    id("com.gradleup.shadow") version "9.+"
 }
 
+group = project.property("group").toString()
+
+java {
+    toolchain.languageVersion.set(JavaLanguageVersion.of(property("java_version").toString().toInt()))
+}
+
+hytaleTools {
+    javaVersion = property("java_version").toString().toInt()
+    hytaleVersion = property("hytale_version").toString()
+    manifestServerVersion = property("manifestServerVersion").toString()
+    manifestGroup = property("manifest_group").toString()
+    modId = property("mod_id").toString()
+    modDescription = property("mod_description").toString()
+    modUrl = property("mod_url").toString()
+    mainClass = property("main_class").toString()
+    modCredits = property("mod_author").toString()
+    manifestDependencies = property("manifest_dependencies").toString()
+    manifestOptionalDependencies = property("manifest_opt_dependencies").toString()
+    curseforgeId = property("curseforgeID").toString()
+    disabledByDefault = property("disabled_by_default").toString().toBoolean()
+    includesPack = property("includes_pack").toString().toBoolean()
+    patchline = property("patchline").toString()
+    injectServerJavadocsIntoSources = property("injectServerJavadocsIntoSources").toString().toBoolean()
+    generateAssetsBinary = property("generateAssetsBinary").toString().toBoolean()
+}
+
+repositories {
+    mavenCentral()
+}
+
+// The single platform JAR bundles api + kernel + module + gamesystem (design: one deployable JAR).
 dependencies {
     implementation(project(":api"))
     implementation(project(":kernel"))
@@ -9,53 +41,17 @@ dependencies {
     implementation(project(":gamesystem"))
 }
 
-hytale {
-    // Optional: Override Hytale installation path (defaults to OS-specific standard location)
-    // hytalePath.set("...")
-
-    // Optional: patch line (defaults to "release")
-    patchLine.set("release")
-
-    // Optional: game version (defaults to "latest")
-    gameVersion.set("latest")
-
-    // Auto-update manifest.json during build? (defaults to true)
-    autoUpdateManifest.set(true)
-
-    // Memory configuration
-    minMemory.set("2G")
-    maxMemory.set("4G")
-
-    // Use AOT cache for faster startup (defaults to true)
-    useAotCache.set(false)
-
-    // Decompilation settings
-    vineflowerVersion.set("1.11.2")
-    decompileFilter.set(listOf("com/hypixel/**"))
-    decompilerHeapSize.set("6G")
-
-    // Automatically attach decompiled sources to IDE (defaults to true)
-    includeDecompiledSources.set(true)
-
-    manifest {
-        group = "org.vttale"
-        name = "VTTale"
-        version = project.version.toString() // Auto-syncs with project version
-        description = "VTTale is a Virtual Tabletop platform for Hytale."
-
-
-        // Or simply by name
-        author("DragoSpiro98")
-
-        serverVersion = "*"
-
-        // Plugin-specific
-        main = "org.vttale.vttale.platform.hytale.VTTaleHytalePlugin"
-        includesAssetPack = true
-        disabledByDefault = false
-    }
+tasks.named<Jar>("jar") {
+    archiveBaseName.set(project.property("mod_name").toString())
+    archiveVersion.set(project.property("version").toString())
 }
 
-tasks.named("sourcesJar") {
-    dependsOn("generateManifest")
+tasks.shadowJar {
+    archiveBaseName.set(project.property("mod_name").toString())
+    archiveVersion.set(project.property("version").toString())
+}
+
+// Deployable artifact: the fat JAR (api+kernel+module+gamesystem classes merged in).
+tasks.named("assemble") {
+    dependsOn(tasks.shadowJar)
 }

@@ -3,21 +3,23 @@ package org.vttale.vttale.api.module;
 /**
  * Registry for managing module lifecycle.
  * <p>
- * The ModuleRegistry is responsible for registering modules and invoking
- * their lifecycle callbacks. Modules registered here will have their
- * {@link Module#onEnable(org.vttale.vttale.api.Kernel)} method called.
- * </p>
+ * Modules registered here have their {@link Module#onEnable} called
+ * immediately. A module whose {@code onEnable} throws is skipped and logged —
+ * one broken module never prevents the server from starting.
  */
 public interface ModuleRegistry {
 
     /**
-     * Registers and enables a module.
-     * <p>
-     * The module's {@link Module#onEnable} method will be called immediately
-     * after registration.
-     * </p>
+     * Registers and enables a module. Duplicate registrations of the same
+     * instance are ignored.
      *
      * @param module the module to register
      */
     void registerModule(Module module);
+
+    /**
+     * Disables every enabled module by calling {@link Module#onDisable()}.
+     * Called once by the platform on server shutdown.
+     */
+    void disableAll();
 }

@@ -1,0 +1,25 @@
+{
+    "Group": "VTTALE",
+    "Name": "vttale",
+    "Version": "0.1.0",
+    "Description": "VTTale: virtual tabletop framework for Hytale",
+    "Authors": [
+        {
+            "Name": "Siryak"
+        }
+    ],
+    "Website": "https://github.com/Cyriaque-TONNERRE/VTTale",
+    "ServerVersion": ">=0.6.4",
+    "Dependencies": {
+        "Hytale:AssetModule": "*"
+    },
+    "OptionalDependencies": {
+        
+    },
+    "DisabledByDefault": false,
+    "Main": "org.vttale.vttale.platform.hytale.VTTaleHytalePlugin",
+    "IncludesAssetPack": true,
+    "UpdateChecker": {
+        "CurseForge": ""
+    }
+}

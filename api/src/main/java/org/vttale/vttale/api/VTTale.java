@@ -1,13 +1,19 @@
 package org.vttale.vttale.api;
 
 import java.util.Objects;
-import java.util.ServiceLoader;
 
 /**
  * Global entry point for the VTTale API.
+ * <p>
+ * The platform (Hytale plugin) creates the kernel and injects it at startup:
+ * <pre>{@code
+ * VTTale.init(new VTTaleKernel());
+ * }</pre>
+ * Modules then read shared state via {@code VTTale.getKernel()}.
  */
 public final class VTTale {
-    private static Kernel kernel;
+
+    private static volatile Kernel kernel;
 
     private VTTale() {
     }
@@ -19,26 +25,23 @@ public final class VTTale {
      * @throws IllegalStateException if the kernel has not been initialized
      */
     public static Kernel getKernel() {
-        if (kernel == null) {
+        Kernel k = kernel;
+        if (k == null) {
             throw new IllegalStateException("VTTale has not been initialized yet!");
         }
-        return kernel;
+        return k;
     }
 
     /**
-     * Initializes the global Kernel using the first available KernelProvider.
+     * Initializes the global Kernel. Called once by the platform at startup.
      *
-     * @throws IllegalStateException if already initialized or no provider is found
+     * @param kernel the kernel instance to expose
+     * @throws IllegalStateException if already initialized
      */
-    public static void init() {
+    public static void init(Kernel kernel) {
         if (VTTale.kernel != null) {
             throw new IllegalStateException("VTTale is already initialized!");
         }
-
-        ServiceLoader<KernelProvider> loader = ServiceLoader.load(KernelProvider.class);
-        KernelProvider provider = loader.findFirst()
-                .orElseThrow(() -> new IllegalStateException("No KernelProvider found in classpath!"));
-
-        VTTale.kernel = Objects.requireNonNull(provider.createKernel(), "Provider returned a null kernel");
+        VTTale.kernel = Objects.requireNonNull(kernel, "kernel");
     }
 }
