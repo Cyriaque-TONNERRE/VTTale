@@ -6,6 +6,7 @@ import org.vttale.vttale.api.token.TokenPosition;
 import org.vttale.vttale.api.token.TokenType;
 import org.vttale.vttale.api.token.behavior.Behavior;
 import org.vttale.vttale.api.token.behavior.BehaviorContext;
+import org.vttale.vttale.api.token.events.TokenUpdatedEvent;
 import org.vttale.vttale.module.token.behavior.SimpleBehaviorContext;
 
 import java.util.*;
@@ -43,6 +44,9 @@ public class SimpleToken implements Token {
     // Behavior contexts: ID -> Context
     private final Map<String, BehaviorContext> behaviorContexts;
 
+    /** Registry that relays update events; null = detached token, no events. */
+    private final SimpleTokenRegistry registry;
+
     /**
      * Creates a new SimpleToken with a CoreTokenType.
      *
@@ -50,7 +54,7 @@ public class SimpleToken implements Token {
      * @param type the token type
      */
     public SimpleToken(String name, TokenType type) {
-        this(UUID.randomUUID(), name, type, null);
+        this(UUID.randomUUID(), name, type, null, null);
     }
 
     /**
@@ -61,7 +65,7 @@ public class SimpleToken implements Token {
      * @param ownerId the owner's UUID
      */
     public SimpleToken(String name, TokenType type, UUID ownerId) {
-        this(UUID.randomUUID(), name, type, ownerId);
+        this(UUID.randomUUID(), name, type, ownerId, null);
     }
 
     /**
@@ -73,10 +77,24 @@ public class SimpleToken implements Token {
      * @param ownerId the owner's UUID
      */
     public SimpleToken(UUID id, String name, TokenType type, UUID ownerId) {
+        this(id, name, type, ownerId, null);
+    }
+
+    /**
+     * Package-private: used by SimpleTokenRegistry so mutations emit events.
+     *
+     * @param id       the token's UUID
+     * @param name     the display name
+     * @param type     the token type
+     * @param ownerId  the owner's UUID
+     * @param registry the owning registry (null for detached tokens)
+     */
+    SimpleToken(UUID id, String name, TokenType type, UUID ownerId, SimpleTokenRegistry registry) {
         this.id = Objects.requireNonNull(id, "Token ID cannot be null");
         this.name = Objects.requireNonNull(name, "Token name cannot be null");
         this.type = Objects.requireNonNull(type, "Token type cannot be null");
         this.ownerId = ownerId;
+        this.registry = registry;
         this.createdAt = System.currentTimeMillis();
         this.lastModifiedAt = this.createdAt;
         this.components = new ConcurrentHashMap<>();
@@ -101,6 +119,7 @@ public class SimpleToken implements Token {
     public void setName(String name) {
         this.name = Objects.requireNonNull(name, "Token name cannot be null");
         markModified();
+        emit(TokenUpdatedEvent.UpdateType.NAME_CHANGED);
     }
 
     @Override
@@ -112,6 +131,7 @@ public class SimpleToken implements Token {
     public void setType(TokenType type) {
         this.type = Objects.requireNonNull(type, "Token type cannot be null");
         markModified();
+        emit(TokenUpdatedEvent.UpdateType.TYPE_CHANGED);
     }
 
     // ==================== Components ====================
@@ -125,8 +145,14 @@ public class SimpleToken implements Token {
     @Override
     public <T extends TokenComponent> void setComponent(T component) {
         Objects.requireNonNull(component, "Component cannot be null");
-        components.put(component.getClass(), component);
+        TokenComponent previous = components.put(component.getClass(), component);
         markModified();
+        if (registry != null) {
+            registry.notifyComponentChanged(this,
+                    previous == null ? TokenUpdatedEvent.UpdateType.COMPONENT_ADDED
+                                     : TokenUpdatedEvent.UpdateType.COMPONENT_UPDATED,
+                    component.getComponentId(), component.getClass());
+        }
     }
 
     @Override
@@ -134,6 +160,10 @@ public class SimpleToken implements Token {
         boolean removed = components.remove(type) != null;
         if (removed) {
             markModified();
+            if (registry != null) {
+                registry.notifyComponentChanged(this, TokenUpdatedEvent.UpdateType.COMPONENT_REMOVED,
+                        type.getName(), type);
+            }
         }
         return removed;
     }
@@ -177,6 +207,10 @@ public class SimpleToken implements Token {
         behavior.onAttach(this, context);
 
         markModified();
+        if (registry != null) {
+            registry.notifyBehaviorChanged(this, TokenUpdatedEvent.UpdateType.BEHAVIOR_ATTACHED,
+                    id, behavior.getClass());
+        }
     }
 
     @Override
@@ -199,6 +233,10 @@ public class SimpleToken implements Token {
         behaviorContexts.remove(behaviorId);
 
         markModified();
+        if (registry != null) {
+            registry.notifyBehaviorChanged(this, TokenUpdatedEvent.UpdateType.BEHAVIOR_DETACHED,
+                    behaviorId, behavior.getClass());
+        }
         return true;
     }
 
@@ -260,6 +298,7 @@ public class SimpleToken implements Token {
         if (tag != null && !tag.isBlank()) {
             tags.add(tag.toLowerCase().trim());
             markModified();
+            emit(TokenUpdatedEvent.UpdateType.TAGS_ADDED);
         }
     }
 
@@ -269,6 +308,7 @@ public class SimpleToken implements Token {
         boolean removed = tags.remove(tag.toLowerCase().trim());
         if (removed) {
             markModified();
+            emit(TokenUpdatedEvent.UpdateType.TAGS_REMOVED);
         }
         return removed;
     }
@@ -289,6 +329,7 @@ public class SimpleToken implements Token {
     public void setPosition(TokenPosition position) {
         this.position = position;
         markModified();
+        emit(TokenUpdatedEvent.UpdateType.POSITION_CHANGED);
     }
 
     @Override
@@ -300,6 +341,7 @@ public class SimpleToken implements Token {
     public void setWorldId(UUID worldId) {
         this.worldId = worldId;
         markModified();
+        emit(TokenUpdatedEvent.UpdateType.WORLD_CHANGED);
     }
 
     // ==================== Entity Binding ====================
@@ -325,6 +367,7 @@ public class SimpleToken implements Token {
     public void setOwnerId(UUID ownerId) {
         this.ownerId = ownerId;
         markModified();
+        emit(TokenUpdatedEvent.UpdateType.OWNER_CHANGED);
     }
 
     // ==================== Timestamps ====================
@@ -344,6 +387,17 @@ public class SimpleToken implements Token {
      */
     private void markModified() {
         this.lastModifiedAt = System.currentTimeMillis();
+    }
+
+    /**
+     * Emits a generic token update to the registry, if attached.
+     *
+     * @param updateType the type of update that occurred
+     */
+    private void emit(TokenUpdatedEvent.UpdateType updateType) {
+        if (registry != null) {
+            registry.notifyTokenUpdated(this, updateType);
+        }
     }
 
     // ==================== Object Methods ====================

@@ -52,7 +52,7 @@ public class SimpleTokenRegistry implements TokenRegistry {
 
     @Override
     public Token create(String name, TokenType type, UUID ownerId) {
-        SimpleToken token = new SimpleToken(name, type, ownerId);
+        SimpleToken token = new SimpleToken(UUID.randomUUID(), name, type, ownerId, this);
         tokens.put(token.getId(), token);
 
         // Publish event for listeners (game systems will add their components)
