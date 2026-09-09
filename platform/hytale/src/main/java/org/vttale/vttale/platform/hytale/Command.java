@@ -88,9 +88,4 @@ public class Command extends AbstractCommand {
         // Skip the first element (command name like "/roll") and return the rest
         return Arrays.copyOfRange(parts, 1, parts.length);
     }
-
-    @Override
-    protected boolean canGeneratePermission() {
-        return false; // VTTale handles permissions differently
-    }
 }

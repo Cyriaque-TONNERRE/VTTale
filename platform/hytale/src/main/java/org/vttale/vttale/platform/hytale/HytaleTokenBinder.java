@@ -1,7 +1,5 @@
 package org.vttale.vttale.platform.hytale;
 
-import com.hypixel.hytale.math.vector.Vector3d;
-import com.hypixel.hytale.math.vector.Vector3f;
 import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.event.events.player.PlayerConnectEvent;
@@ -10,6 +8,8 @@ import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
+import org.joml.Vector3d;
+import org.joml.Vector3f;
 import org.vttale.vttale.api.Kernel;
 import org.vttale.vttale.api.events.EventBus;
 import org.vttale.vttale.api.events.EventContext;
@@ -167,11 +167,11 @@ public class HytaleTokenBinder {
             // Updates token position from player transform
             if (transform != null) {
                 TokenPosition pos = new TokenPosition(
-                        transform.getPosition().getX(),
-                        transform.getPosition().getY(),
-                        transform.getPosition().getZ(),
-                        transform.getRotation().getY(), // yaw
-                        transform.getRotation().getX()  // pitch
+                        transform.getPosition().x(),
+                        transform.getPosition().y(),
+                        transform.getPosition().z(),
+                        transform.getRotation().yaw(), // yaw
+                        transform.getRotation().pitch()  // pitch
                 );
                 playerToken.setPosition(pos);
             }
