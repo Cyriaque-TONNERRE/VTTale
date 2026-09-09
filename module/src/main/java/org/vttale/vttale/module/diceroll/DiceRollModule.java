@@ -4,25 +4,29 @@ import org.vttale.vttale.api.Kernel;
 import org.vttale.vttale.api.events.CommandExecutedEvent;
 import org.vttale.vttale.api.events.EventBus;
 import org.vttale.vttale.api.events.EventContext;
-import org.vttale.vttale.module.chat.SendMessageEvent;
 import org.vttale.vttale.api.module.Module;
+import org.vttale.vttale.module.chat.SendMessageEvent;
 
-import java.util.Random;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.random.RandomGenerator;
+import java.util.stream.Collectors;
 
 /**
  * Module responsible for handling dice roll commands.
+ * Rolls are also published as {@link DiceRolledEvent} so other modules can react.
  */
 public class DiceRollModule implements Module {
-    private static final Pattern DICE_PATTERN = Pattern.compile("^(\\d+)?d(\\d+)(?:([+-])(\\d+))?$");
-    private final Random random = new Random();
+
+    // ponytail: caps block chat-input abuse (each die is cheap, a million dice is not)
+    private static final int MAX_DICE = 100;
+    private static final int MAX_SIDES = 1000;
+
+    private final Dice dice = new Dice(RandomGenerator.getDefault());
     private EventBus eventBus;
 
     @Override
     public void onEnable(Kernel kernel) {
         this.eventBus = kernel.getEventBus();
-        kernel.getCommandRegistry().registerCommand("roll", "Roll dice");
+        kernel.getCommandRegistry().registerCommand("roll", "Roll dice, e.g. /roll 2d6+3");
         eventBus.subscribe(CommandExecutedEvent.class, this::onCommandExecuted);
     }
 
@@ -37,53 +41,28 @@ public class DiceRollModule implements Module {
             return;
         }
 
-        // Join arguments and remove spaces to handle notations like "1d10 + 10"
-        String notation = String.join("", args).replace(" ", "").toLowerCase();
-        Matcher matcher = DICE_PATTERN.matcher(notation);
-
-        if (!matcher.matches()) {
-            reply(context, "Invalid dice notation: " + notation);
-            return;
-        }
+        // Join arguments and strip spaces to handle notations like "1d10 + 10"
+        String notation = String.join("", args).replace(" ", "");
 
         try {
-            int count = matcher.group(1) == null ? 1 : Integer.parseInt(matcher.group(1));
-            int sides = Integer.parseInt(matcher.group(2));
-            String operator = matcher.group(3);
-            int modifier = matcher.group(4) == null ? 0 : Integer.parseInt(matcher.group(4));
-
-            if (count > 100 || sides > 1000) {
+            DiceRolledEvent result = dice.roll(notation);
+            if (result.rolls().size() > MAX_DICE || notation.matches(".*d(\\d{4,}).*")) {
                 reply(context, "Dice count or sides too high!");
                 return;
             }
-
-            if (sides <= 0) {
-                reply(context, "Dice sides must be greater than 0!");
-                return;
-            }
-
-            int total = 0;
-            StringBuilder rolls = new StringBuilder();
-            for (int i = 0; i < count; i++) {
-                int roll = random.nextInt(sides) + 1;
-                total += roll;
-                rolls.append(roll).append(i < count - 1 ? ", " : "");
-            }
-
-            if ("+".equals(operator)) {
-                total += modifier;
-            } else if ("-".equals(operator)) {
-                total -= modifier;
-            }
-
-            String resultMsg = String.format("Rolled %s: [%s]%s = %d",
-                    notation, rolls, (operator != null ? " " + operator + modifier : ""), total);
-
-            reply(context, resultMsg);
-
-        } catch (NumberFormatException e) {
-            reply(context, "Error parsing numbers in notation.");
+            eventBus.publish(result, context);
+            reply(context, format(result));
+        } catch (IllegalArgumentException e) {
+            reply(context, "Invalid dice notation: " + notation);
         }
+    }
+
+    private static String format(DiceRolledEvent r) {
+        String rolls = r.rolls().stream().map(String::valueOf).collect(Collectors.joining(", "));
+        String mod = r.modifier() == 0 ? ""
+                : (r.modifier() > 0 ? " + " + r.modifier() : " - " + (-r.modifier()));
+        // ASCII only: the game chat font does not render glyphs like emoji/arrows
+        return r.notation() + " -> [" + rolls + "]" + mod + " = " + r.total();
     }
 
     private void reply(EventContext context, String message) {
