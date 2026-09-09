@@ -157,15 +157,16 @@ public class SimpleToken implements Token {
 
     @Override
     public <T extends TokenComponent> boolean removeComponent(Class<T> type) {
-        boolean removed = components.remove(type) != null;
-        if (removed) {
-            markModified();
-            if (registry != null) {
-                registry.notifyComponentChanged(this, TokenUpdatedEvent.UpdateType.COMPONENT_REMOVED,
-                        type.getName(), type);
-            }
+        TokenComponent removed = components.remove(type);
+        if (removed == null) {
+            return false;
         }
-        return removed;
+        markModified();
+        if (registry != null) {
+            registry.notifyComponentChanged(this, TokenUpdatedEvent.UpdateType.COMPONENT_REMOVED,
+                    removed.getComponentId(), removed.getClass());
+        }
+        return true;
     }
 
     @Override
