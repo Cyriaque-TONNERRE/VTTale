@@ -8,6 +8,8 @@ import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.module.chat.SendMessageEvent;
 
 import java.util.random.RandomGenerator;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -15,6 +17,8 @@ import java.util.stream.Collectors;
  * Rolls are also published as {@link DiceRolledEvent} so other modules can react.
  */
 public class DiceRollModule implements Module {
+
+    private static final Pattern DICE_SHAPE = Pattern.compile("(\\d+)?d(\\d+)");
 
     // ponytail: caps block chat-input abuse (each die is cheap, a million dice is not)
     private static final int MAX_DICE = 100;
@@ -42,14 +46,28 @@ public class DiceRollModule implements Module {
         }
 
         // Join arguments and strip spaces to handle notations like "1d10 + 10"
-        String notation = String.join("", args).replace(" ", "");
+        String notation = String.join("", args).replace(" ", "").toLowerCase();
+
+        // Validate shape and caps BEFORE rolling: a hostile "999999999d6" must
+        // not allocate anything.
+        Matcher shape = DICE_SHAPE.matcher(notation);
+        int count = 1;
+        int sides = 0;
+        if (shape.find()) {
+            count = shape.group(1) == null ? 1 : Integer.parseInt(shape.group(1));
+            sides = Integer.parseInt(shape.group(2));
+        }
+        if (sides == 0) {
+            reply(context, "Invalid dice notation: " + notation);
+            return;
+        }
+        if (count > MAX_DICE || sides > MAX_SIDES) {
+            reply(context, "Dice count or sides too high!");
+            return;
+        }
 
         try {
             DiceRolledEvent result = dice.roll(notation);
-            if (result.rolls().size() > MAX_DICE || notation.matches(".*d(\\d{4,}).*")) {
-                reply(context, "Dice count or sides too high!");
-                return;
-            }
             eventBus.publish(result, context);
             reply(context, format(result));
         } catch (IllegalArgumentException e) {
