@@ -20,14 +20,14 @@ Base de départ : la branche `poc/VTT-38-Token-Registry` de `VTTaleTeam/VTTale` 
 | Plugins tiers | JAR Hytale séparé, `Dependencies: VTTALE:vttale=*`, auto-enregistrement dans `setup()` |
 | Tests | Aucun test unitaire (choix explicite). Validation en jeu : JAR → `%APPDATA%\Hytale\UserData\Mods` |
 
-> Les classloaders Hytale sont isolés par JAR (`PluginClassLoader`, accès aux deps de manifest via bridge). Conséquence : le `ServiceLoader` cross-JAR est impossible — d'où l'auto-enregistrement pour les tiers, le ServiceLoader restant valable pour les modules embarqués.
+> Les classloaders Hytale sont isolés par JAR (`PluginClassLoader`, accès aux deps de manifest via bridge). Conséquence : aucun mécanisme de découverte cross-JAR n'existe — les modules tiers s'auto-enregistrent dans leur `setup()`, les modules embarqués sont enregistrés explicitement par le platform.
 
 ## Layout Gradle
 
 ```
 VTTale/
 ├── api/                 # contrats purs, org.vttale.vttale.api — ZÉRO import Hytale
-├── kernel/              # impls simples + KernelProvider (SPI, META-INF/services)
+├── kernel/              # impls simples (VTTaleKernel, SimpleEventBus, registries)
 ├── module/              # modules intégrés : chat, diceroll, token (impls)
 ├── gamesystem/          # dnd5e — exemple de système de jeu (simple Module)
 └── platform/hytale/     # LE plugin Hytale : VTTale-x.y.jar (tout embarque, implementation deps)
@@ -35,10 +35,10 @@ VTTale/
 
 ## Abstractions core
 
-1. **`VTTale.getKernel()`** — façade statique ; kernel créé au démarrage du platform via `ServiceLoader<KernelProvider>`.
+1. **`VTTale.getKernel()`** — façade statique ; le platform crée le kernel (`new VTTaleKernel()`) et l'injecte via `VTTale.init(kernel)`. Pas de SPI : une seule impl, nous.
 2. **`Kernel`** — conteneur de services extensible : `getEventBus()`, `getCommandRegistry()`, `getModuleRegistry()`, `getService(Class<T>)`, `registerService(Class<T>, T)`. Toute capacité nouvelle (TokenRegistry, BehaviorDispatcher…) est un service posé par un module — jamais un accesseur codé en dur dans le noyau.
 3. **`Module`** — `onEnable(Kernel)` / `onDisable()`, l'unique point d'extension :
-   - modules embarqués → `META-INF/services/org.vttale.vttale.api.module.Module`, découverts au démarrage du kernel ;
+   - modules embarqués → enregistrés explicitement par le platform (`registerModule(new ChatModule())`, …) : liste lisible, ordre contrôlé ;
    - modules tiers → `VTTale.getKernel().getModuleRegistry().registerModule(...)` dans le `setup()` de leur plugin Hytale.
 4. **`EventBus`** — synchrone et typé : `publish(event, EventContext)` / `subscribe(Class, BiConsumer)`, avec **priorités** (ordre croissant, le plus bas d'abord, égalité = ordre d'abonnement ; un publish ne rend la main qu'après tous les handlers). `EventContext` porte le `senderId` (UUID joueur, `"CONSOLE"`, `"KERNEL"`).
 5. **Commandes** — `kernel.getCommandRegistry().registerCommand(name, description[, options])` → publie `RegisterCommandRequest` → l'`HytaleAdapter` binde au système de commandes Hytale (avec rattrapage des commandes enregistrées avant son activation) ; les réponses routent via `PlatformBroadcastEvent` (CONSOLE ou `PlayerRef`). Les modules ne voient jamais l'API Hytale.
@@ -65,7 +65,7 @@ VTTale/
 1. **Code** : `class MonModule implements Module` — composants, behaviors, événements, tout Java pur : api, kernel et modules ne dépendent d'aucune classe Hytale et s'exécutent hors serveur.
 2. **Livraison** :
    - **JAR tiers** (cas standard) : plugin Hytale avec manifest `Dependencies: VTTALE:vttale=*` ; dans `setup()` : enregistrement du module. Le classloader bridge rend api/kernel visibles.
-   - **Embarqué** : contribution au repo → entrée META-INF/services.
+   - **Embarqué** : contribution au repo → classe référencée dans la liste d'enregistrement du platform.
 3. **Réutilisation** : services kernel (`getService(TokenRegistry.class)`, `getService(BehaviorDispatcher.class)`), événements des autres modules, CommandRegistry pour ses commandes.
 
 ## Gestion d'erreurs
