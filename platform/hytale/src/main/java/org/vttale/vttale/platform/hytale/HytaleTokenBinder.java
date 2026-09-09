@@ -316,21 +316,10 @@ public class HytaleTokenBinder {
      *
      * @param token    the token to spawn
      * @param position the position to spawn at
-     * @return the entity UUID (placeholder until Hytale API available)
+     * @throws UnsupportedOperationException always — entity spawning is not yet implemented
      */
     public UUID spawnEntityForToken(Token token, TokenPosition position) {
-        token.setPosition(position);
-
-        World world = getWorldForToken(token);
-        if (world != null) {
-            // TODO: Implement actual entity spawning
-            LOGGER.info("Would spawn entity for token: " + token.getName() + " at " + position);
-        }
-
-        // For now, create a placeholder UUID and bind
-        UUID entityId = UUID.randomUUID();
-        tokenRegistry.bindToEntity(token.getId(), entityId);
-        return entityId;
+        throw new UnsupportedOperationException("Entity spawning not yet implemented - waiting for Hytale API");
     }
 
     /**
