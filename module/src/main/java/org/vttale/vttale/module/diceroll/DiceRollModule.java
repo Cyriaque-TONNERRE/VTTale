@@ -7,33 +7,33 @@ import org.vttale.vttale.api.events.EventContext;
 import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.module.chat.SendMessageEvent;
 
-import java.util.random.RandomGenerator;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
- * Module responsible for handling dice roll commands.
- * Rolls are also published as {@link DiceRolledEvent} so other modules can react.
+ * Module exposing dice rolling as a service ({@link DiceService}) plus the
+ * /roll command as a thin notation parser on top of it. Other modules roll
+ * via {@code kernel.getService(DiceService.class)} — not much should flow
+ * through commands.
  */
 public class DiceRollModule implements Module {
-
-    private static final Pattern DICE_SHAPE = Pattern.compile("(\\d+)?d(\\d+)");
 
     // ponytail: caps block chat-input abuse (each die is cheap, a million dice is not)
     private static final int MAX_DICE = 100;
     private static final int MAX_SIDES = 1000;
 
-    private final Dice dice = new Dice(RandomGenerator.getDefault());
     private EventBus eventBus;
+    private DiceService dice;
 
     @Override
     public void onEnable(Kernel kernel) {
         this.eventBus = kernel.getEventBus();
+        this.dice = new SimpleDiceService(eventBus);
+        kernel.registerService(DiceService.class, dice);
         kernel.getCommandRegistry().registerCommand("roll", "Roll dice, e.g. /roll 2d6+3");
         eventBus.subscribe(CommandExecutedEvent.class, this::onCommandExecuted);
     }
 
+    /** Command layer: parse the notation, enforce the caps, delegate to the service. */
     private void onCommandExecuted(CommandExecutedEvent event, EventContext context) {
         if (!event.getCommandName().equals("roll")) {
             return;
@@ -46,33 +46,53 @@ public class DiceRollModule implements Module {
         }
 
         // Join arguments and strip spaces to handle notations like "1d10 + 10"
-        String notation = String.join("", args).replace(" ", "").toLowerCase();
+        String notation = String.join("", args).replace(" ", "");
 
         try {
-            // Validate shape and caps BEFORE rolling: a hostile "999999999d6" must
-            // not allocate anything.
-            Matcher shape = DICE_SHAPE.matcher(notation);
-            int count = 1;
-            int sides = 0;
-            if (shape.find()) {
-                count = shape.group(1) == null ? 1 : Integer.parseInt(shape.group(1));
-                sides = Integer.parseInt(shape.group(2));
-            }
-            if (sides == 0) {
-                reply(context, "Invalid dice notation: " + notation);
-                return;
-            }
-            if (count > MAX_DICE || sides > MAX_SIDES) {
+            ParsedRoll roll = parse(notation);
+            if (roll.count() > MAX_DICE || roll.sides() > MAX_SIDES) {
                 reply(context, "Dice count or sides too high!");
                 return;
             }
-
-            DiceRolledEvent result = dice.roll(notation);
-            eventBus.publish(result, context);
+            DiceRolledEvent result = dice.roll(roll.count(), roll.sides(), roll.modifier());
             reply(context, format(result));
         } catch (IllegalArgumentException e) {
             reply(context, "Invalid dice notation: " + notation);
         }
+    }
+
+    /** A parsed notation: {@code count} dice of {@code sides} faces, plus {@code modifier}. */
+    private record ParsedRoll(int count, int sides, int modifier) {}
+
+    /**
+     * Parses "NdM[+/-K]"; "d6" and "6" both mean 1d6. Throws
+     * {@link NumberFormatException} (an {@link IllegalArgumentException}) on
+     * garbage or absurd numbers, before any allocation.
+     */
+    private static ParsedRoll parse(String notation) {
+        String expr = notation.strip().toLowerCase();
+        int modifier = 0;
+        int plus = expr.indexOf('+');
+        int minus = expr.indexOf('-');
+        if (plus >= 0) {
+            modifier = Integer.parseInt(expr.substring(plus + 1).strip());
+            expr = expr.substring(0, plus).strip();
+        } else if (minus >= 0) {
+            modifier = -Integer.parseInt(expr.substring(minus + 1).strip());
+            expr = expr.substring(0, minus).strip();
+        }
+
+        int count = 1;
+        int d = expr.indexOf('d');
+        if (d >= 0) {
+            String before = expr.substring(0, d).strip();
+            if (!before.isEmpty()) {
+                count = Integer.parseInt(before);
+            }
+            expr = expr.substring(d + 1).strip();
+        }
+        int sides = Integer.parseInt(expr);
+        return new ParsedRoll(count, sides, modifier);
     }
 
     private static String format(DiceRolledEvent r) {
