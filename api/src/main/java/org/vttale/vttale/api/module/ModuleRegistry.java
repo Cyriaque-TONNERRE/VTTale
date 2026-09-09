@@ -12,6 +12,10 @@ public interface ModuleRegistry {
     /**
      * Registers and enables a module. Duplicate registrations of the same
      * instance are ignored.
+     * <p>
+     * A module skipped after a failed {@link Module#onEnable} never receives
+     * {@link Module#onDisable()}: cleaning up anything it registered before
+     * throwing is its own responsibility.
      *
      * @param module the module to register
      */

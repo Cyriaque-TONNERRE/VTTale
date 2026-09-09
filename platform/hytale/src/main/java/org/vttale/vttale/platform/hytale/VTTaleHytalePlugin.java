@@ -22,6 +22,9 @@ import java.util.logging.Level;
  * Bootstrap order: create kernel, inject facade, register built-in modules
  * explicitly (no SPI), wire the token binder when the token service exists,
  * then disable everything cleanly on shutdown.
+ * <p>
+ * Reload is not supported: the plugin boots once per JVM (VTTale.init throws
+ * on re-init, and setup() registers a shutdown hook that a second boot would pile up).
  */
 public class VTTaleHytalePlugin extends JavaPlugin {
 
