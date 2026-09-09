@@ -46,3 +46,5 @@ bin/
 
 ### Hytale Source
 /.hytale-source
+# IDE
+.idea/
