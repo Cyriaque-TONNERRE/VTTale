@@ -3,14 +3,12 @@ package org.vttale.vttale.kernel;
 import org.vttale.vttale.api.Kernel;
 import org.vttale.vttale.api.command.CommandRegistry;
 import org.vttale.vttale.api.events.EventBus;
-import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.module.ModuleRegistry;
 import org.vttale.vttale.kernel.command.SimpleCommandRegistry;
 import org.vttale.vttale.kernel.events.SimpleEventBus;
 import org.vttale.vttale.kernel.module.SimpleModuleRegistry;
 
 import java.util.Map;
-import java.util.ServiceLoader;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class VTTaleKernel implements Kernel {
@@ -21,18 +19,14 @@ public class VTTaleKernel implements Kernel {
     private final Map<Class<?>, Object> services = new ConcurrentHashMap<>();
 
     /**
-     * Initializes registries; registers modules via service provider
+     * Initializes registries. Modules are registered explicitly by the
+     * platform (no SPI): built-in modules in the platform setup(), third
+     * -party modules from their own plugin setup().
      */
     public VTTaleKernel() {
         this.eventBus = new SimpleEventBus();
         this.commandRegistry = new SimpleCommandRegistry(eventBus);
         this.moduleRegistry = new SimpleModuleRegistry(this);
-
-        // Auto-discover and register modules via SPI
-        ServiceLoader<Module> loader = ServiceLoader.load(Module.class);
-        for (Module module : loader) {
-            moduleRegistry.registerModule(module);
-        }
     }
 
     @Override
