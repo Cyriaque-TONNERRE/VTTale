@@ -5,8 +5,8 @@ import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.module.ModuleRegistry;
 
 import java.lang.System.Logger.Level;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Simple implementation of ModuleRegistry that manages module lifecycle.
@@ -17,7 +17,7 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     private static final System.Logger LOGGER = System.getLogger(SimpleModuleRegistry.class.getName());
 
     private final Kernel kernel;
-    private final List<Module> modules = new ArrayList<>();
+    private final List<Module> modules = new CopyOnWriteArrayList<>();
 
     public SimpleModuleRegistry(Kernel kernel) {
         this.kernel = kernel;
