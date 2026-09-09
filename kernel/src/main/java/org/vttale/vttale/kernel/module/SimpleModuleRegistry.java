@@ -30,7 +30,7 @@ public class SimpleModuleRegistry implements ModuleRegistry {
         }
         try {
             module.onEnable(kernel);
-        } catch (Exception e) {
+        } catch (Throwable e) {
             LOGGER.log(Level.ERROR, "Module " + module.getClass().getName()
                     + " failed to enable and was skipped", e);
             return;
@@ -43,7 +43,7 @@ public class SimpleModuleRegistry implements ModuleRegistry {
         for (Module module : modules) {
             try {
                 module.onDisable();
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 LOGGER.log(Level.ERROR, "Module " + module.getClass().getName() + " failed to disable", e);
             }
         }

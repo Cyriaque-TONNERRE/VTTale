@@ -40,7 +40,7 @@ public class SimpleEventBus implements EventBus {
         for (Handler handler : sorted) {
             try {
                 ((BiConsumer<T, EventContext>) handler.action()).accept(event, context);
-            } catch (Exception e) {
+            } catch (Throwable e) {
                 // One broken handler must not break the others or the caller.
                 LOGGER.log(Level.ERROR, "Event handler failed for " + event.getClass().getSimpleName(), e);
             }
