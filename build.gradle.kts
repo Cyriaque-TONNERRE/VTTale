@@ -1,36 +1,27 @@
-plugins {
-    id("java")
+// Shared config only; platform:hytale applies hytale-tools itself (see its build.gradle.kts).
+allprojects {
+    group = property("group").toString()
+    version = property("version").toString()
 }
 
-group = "org.vttale.vttale"
-version = "1.0-SNAPSHOT"
-
 subprojects {
-    plugins.apply("java")
-
-    group = "${project.property("group")}"
-    version = "${project.property("version")}"
-
-    repositories {
-        mavenCentral()
-    }
-
-    java {
-        toolchain {
-            languageVersion.set(JavaLanguageVersion.of(21))
+    plugins.withId("java") {
+        // `java { }` type-safe accessors are only generated for scripts that apply the plugin,
+        // so configure the extension by type instead (same effect).
+        val javaVersion = property("java_version").toString().toInt()
+        extensions.configure<JavaPluginExtension>("java") {
+            toolchain.languageVersion.set(JavaLanguageVersion.of(javaVersion))
         }
-        withSourcesJar()
-    }
-
-    tasks {
-        withType<JavaCompile> {
+        repositories {
+            mavenCentral()
+        }
+        tasks.withType<JavaCompile>().configureEach {
+            // sources are UTF-8; never fall back to the platform charset
             options.encoding = "UTF-8"
-            options.release = 21
-            options.compilerArgs.add("-Xlint:none")
         }
-        jar {
-            archiveClassifier.set("noshade")
-            archiveFileName.set("${project.property("artifactName")}-${project.version}.jar")
+        tasks.withType<Javadoc>().configureEach {
+            (options as org.gradle.external.javadoc.StandardJavadocDocletOptions)
+                .addStringOption("Xdoclint:-missing", "-quiet")
         }
     }
 }

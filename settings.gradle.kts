@@ -1,12 +1,22 @@
 pluginManagement {
     repositories {
-        maven("https://repo.smolder.fr/public/")
         gradlePluginPortal()
+        mavenCentral()
+        maven {
+            name = "AzureDoom Maven"
+            url = uri("https://maven.azuredoom.com/mods")
+        }
     }
 }
+
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "1.0.0"
+}
+
 rootProject.name = "VTTale"
-include("kernel")
+
 include("api")
-include("platform:hytale")
-include("gamesystem")
+include("kernel")
 include("module")
+include("gamesystem")
+include("platform:hytale")
