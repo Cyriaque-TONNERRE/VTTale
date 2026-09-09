@@ -1,6 +1,6 @@
 plugins {
-    id("com.azuredoom.hytale-tools") version "1.+"
-    id("com.gradleup.shadow") version "9.+"
+    id("com.azuredoom.hytale-tools") version "1.0.50"
+    id("com.gradleup.shadow") version "9.6.1"
 }
 
 group = project.property("group").toString()
