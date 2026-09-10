@@ -1,6 +1,7 @@
 package org.vttale.vttale.kernel.module;
 
 import org.vttale.vttale.api.Kernel;
+import org.vttale.vttale.api.gamesystem.GameSystem;
 import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.module.ModuleRegistry;
 
@@ -24,9 +25,19 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     }
 
     @Override
-    public void registerModule(Module module) {
+    public synchronized void registerModule(Module module) {
         if (modules.contains(module)) {
             return;
+        }
+        // Exclusivity: at most one GameSystem per server. Refused BEFORE onEnable, so the
+        // rejected module produces no side effect at all - nothing to roll back.
+        if (module instanceof GameSystem candidate) {
+            GameSystem active = kernel.getService(GameSystem.class);
+            if (active != null) {
+                LOGGER.log(Level.ERROR, "A game system is already active (" + active.id()
+                        + "); refusing " + candidate.getClass().getName());
+                return;
+            }
         }
         try {
             module.onEnable(kernel);
