@@ -131,3 +131,7 @@ Coût : `onEnable` s'exécute sous le verrou. C'est une opération de démarrage
 - La garde connaît `GameSystem` par `instanceof` : le kernel importe pour la première fois un concept métier plutôt qu'une brique d'infrastructure. Acceptable pour **un** concept exclusif. **Déclencheur de généralisation** : le deuxième concept exclusif (un `MapProvider`, un `InitiativeTracker`…). La forme cible est alors `Module.provides()` — méthode par défaut retournant `Set.of()`, que la registry vérifie avant `onEnable` — qui rend la garde générique et le kernel de nouveau agnostique.
 - Pas de `GameSystemRegistry`, pas d'événement dédié (`GameSystemActivatedEvent` — YAGNI, la lecture du service suffit). **Déclencheur** : avant la publication du premier module tiers qui lit `getService(GameSystem.class)`, pas « le jour où un serveur fait tourner deux rulesets » — après cette date, changer la forme casse le code des autres.
 - `components()` part sans appelant. Si aucun consommateur n'apparaît d'ici l'arrivée de la persistance ou du multi-systèmes, le retirer de l'API publique avant qu'un tiers ne s'y appuie.
+- La garde lit le slot service : un code qui écrase directement
+  `registerService(GameSystem.class, x)` hors de `registerModule` peut la
+  contourner. Cohérent avec `registerService` volontairement permissif ;
+  la menace visée est le bug, pas la malveillance.

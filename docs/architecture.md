@@ -69,7 +69,8 @@ le serveur démarre. Le contrat est lu ainsi :
 
 - système actif : `kernel.getService(GameSystem.class)` ;
 - enregistrement : le système fait `kernel.registerService(GameSystem.class, this)`
-  dans son `onEnable` (pattern DiceService).
+  dans son `onEnable` (pattern DiceService) — **sans cet enregistrement, la garde
+  d'exclusivité ne détecte pas votre système**.
 
 Écrire un système de jeu = écrire un module qui implémente `GameSystem`
 au lieu de `Module` ; le reste (commandes, events, behaviors, services)

@@ -11,7 +11,7 @@ import java.util.Set;
  * event subscriptions, plus metadata that lets the kernel answer
  * "which ruleset is active?".
  * <p>
- * Exactly one game system may be active per server: {@code SimpleModuleRegistry}
+ * Exactly one game system may be active per server: the module registry
  * refuses a second one before its {@code onEnable} runs. Consumers read the
  * active system with {@code kernel.getService(GameSystem.class)}.
  */
