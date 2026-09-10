@@ -1,3 +1,5 @@
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
+
 // Shared config only; platform:hytale applies hytale-tools itself (see its build.gradle.kts).
 allprojects {
     group = property("group").toString()
@@ -20,8 +22,25 @@ subprojects {
             options.encoding = "UTF-8"
         }
         tasks.withType<Javadoc>().configureEach {
-            (options as org.gradle.external.javadoc.StandardJavadocDocletOptions)
+            (options as StandardJavadocDocletOptions)
                 .addStringOption("Xdoclint:-missing", "-quiet")
+        }
+
+        // ---- Tests: JUnit 5 for every Java subproject, configured in one place ----
+        dependencies {
+            val junitVersion = property("junit_version").toString()
+            "testImplementation"(platform("org.junit:junit-bom:$junitVersion"))
+            "testImplementation"("org.junit.jupiter:junit-jupiter")
+            "testRuntimeOnly"("org.junit.platform:junit-platform-launcher")
+        }
+        tasks.withType<Test>().configureEach {
+            useJUnitPlatform()
+            // A silent test suite is a suite nobody reads: always show what ran and why it failed.
+            testLogging {
+                events("passed", "skipped", "failed")
+                exceptionFormat = TestExceptionFormat.FULL
+                showStandardStreams = false
+            }
         }
     }
 }
