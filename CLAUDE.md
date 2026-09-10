@@ -6,14 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Discussions in **French**; code, comments, commit messages and Javadoc in **English**.
 - Commit messages: conventional style, plain, **no `Co-Authored-By` trailer**.
-- **No unit tests** — explicit project decision. Verification = `./gradlew build` (compile) + in-game validation: copy `platform/hytale/build/libs/VTTale-<version>-all.jar` to `%APPDATA%\Hytale\UserData\Mods`, launch Hytale → create world → settings cog → Mods, confirm "VTTale" is listed.
 - Feature work on a branch, `--no-ff` merge to `main`, push, then delete the branch (local + remote).
 
 ## Project
 
 VTTale turns a Hytale server into a tabletop RPG platform. It is a **framework**, not an app: the kernel provides the bricks (event bus, service container, tokens, behaviors, commands) and all gameplay is written as modules on top — never by modifying the kernel.
 
-- Language: Java 25. Build: Gradle (wrapper 9.5.1, Kotlin DSL). `platform:hytale` uses `com.azuredoom.hytale-tools` (pinned) to resolve the Hytale Server dependency and generate `manifest.json`; `com.gradleup.shadow` bundles the single deployable fat JAR.
+- Language: Java 25. Build: Gradle (wrapper 9.7.1, Kotlin DSL). `platform:hytale` uses `com.azuredoom.hytale-tools` (pinned) to resolve the Hytale Server dependency and generate `manifest.json`; `com.gradleup.shadow` bundles the single deployable fat JAR.
 - Origin: fork of https://github.com/VTTaleTeam/VTTale (branch `poc/VTT-38-Token-Registry`). README credits the original contributors — keep them.
 - Project documentation (French): `docs/architecture.md` (framework + module-author guide) and `docs/superpowers/specs/2026-09-09-framework-design.md` (design spec, source of truth). Update `docs/architecture.md` when changing architecture or commands.
 - Old local references: Hytale decompiled sources (no assets) at `C:\Users\Siryak\Documents\HytaleSource\{HytaleServer,HytaleClient,Protocol}`; previous prototype repo at `C:\Users\Siryak\Documents\TTTALE` (read-only reference, never commit there).
@@ -37,6 +36,16 @@ VTTale/
 - **Event bus**: synchronous, typed, priority-ordered (lower first, ties = subscription order). `publish` returns only after every handler returned. Handler/module failures are caught (`Throwable` at plugin boundaries), logged, and contained — one broken module never kills the server.
 - **Tokens**: identity + Components (data) + tags (filters) + Behaviors (logic, private `BehaviorContext`, dispatched via `BehaviorDispatcher`). Lifecycle events are exactly `TokenCreatedEvent`, `TokenRemovedEvent`, `TokenUpdatedEvent`, `TokenBoundEvent` — every mutation flows through `TokenUpdatedEvent`; there are no Moved/Selected/Placed events.
 - Reload is not supported: the plugin boots once per JVM (`VTTale.init` throws on re-init).
+
+## Tests
+
+- **Unit tests required** on `api`, `kernel`, `module`, `gamesystem` (JUnit 5).
+  Verification = `./gradlew :api:test :kernel:test :module:test :gamesystem:test`,
+  then `./gradlew build` (compile), then in-game validation: copy
+  `platform/hytale/build/libs/VTTale-<version>-all.jar` to `%APPDATA%\Hytale\UserData\Mods`...
+- Tests tagged `KNOWN LIMITATION` pin current buggy behaviour on purpose; when the
+  fix lands, the test is expected to fail — replace it, do not delete it.
+- `platform/hytale` is not unit-tested (needs the Hytale SDK) and is excluded from CI.
 
 ## Commands
 
