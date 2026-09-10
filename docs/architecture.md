@@ -57,6 +57,24 @@ Les classloaders Hytale sont isolés par JAR : aucun mécanisme de découverte
 cross-JAR n'existe. L'auto-enregistrement dans `setup()` est donc le seul
 chemin pour un module tiers.
 
+## Systèmes de jeu
+
+Un système de jeu (D&D 5e, Pathfinder 2e, …) est un `GameSystem` :
+un `Module` qui porte en plus son identité — `id()`, `version()`,
+`components()` (types de composants possédés, informatif pour l'instant).
+
+**Un seul actif par serveur.** `SimpleModuleRegistry` refuse un second
+`GameSystem` **avant** son `onEnable` : zéro effet de bord, log d'erreur,
+le serveur démarre. Le contrat est lu ainsi :
+
+- système actif : `kernel.getService(GameSystem.class)` ;
+- enregistrement : le système fait `kernel.registerService(GameSystem.class, this)`
+  dans son `onEnable` (pattern DiceService).
+
+Écrire un système de jeu = écrire un module qui implémente `GameSystem`
+au lieu de `Module` ; le reste (commandes, events, behaviors, services)
+ne change pas.
+
 ## Bus d'événements
 
 Synchrone et typé : `publish(event, EventContext)` /
@@ -121,6 +139,8 @@ Flux type :
   (jamais `printStackTrace`), les handlers suivants s'exécutent quand même.
 - **`Module.onEnable` qui jette** : le module est ignoré, log d'erreur, le
   serveur démarre. Un module cassé ne tue jamais le serveur.
+- **Second `GameSystem` refusé** : refusé avant tout effet de bord (pas
+  d'`onEnable` du tout), log d'erreur, le premier système reste actif.
 
 ## Parcours d'un dev tiers
 
