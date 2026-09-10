@@ -45,4 +45,14 @@ class DND5EGameSystemTest {
     void ownsNoComponents() {
         assertTrue(system.components().isEmpty());
     }
+
+    @Test
+    @DisplayName("publishes itself when enabled through the module registry")
+    void publishesItselfThroughTheRegistry() {
+        kernel.getModuleRegistry().registerModule(system);
+
+        // Guards the contract from the registry's side: if DND5EGameSystem ever stopped
+        // publishing itself, the exclusivity guard would silently stop covering it.
+        assertSame(system, kernel.getService(GameSystem.class));
+    }
 }

@@ -14,6 +14,13 @@ import java.util.Set;
  * Exactly one game system may be active per server: the module registry
  * refuses a second one before its {@code onEnable} runs. Consumers read the
  * active system with {@code kernel.getService(GameSystem.class)}.
+ * <p>
+ * <b>An implementation must publish itself</b> in {@link Module#onEnable}:
+ * <pre>{@code kernel.registerService(GameSystem.class, this);}</pre>
+ * The exclusivity guard is a lookup of that service. A system that skips this step
+ * still runs, but the registry cannot see it - and a second system would then be
+ * accepted, silently breaking the "exactly one" rule above. The registry logs an
+ * error when it detects the omission.
  */
 public interface GameSystem extends Module {
 

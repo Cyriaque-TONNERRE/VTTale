@@ -29,13 +29,14 @@ public class SimpleModuleRegistry implements ModuleRegistry {
         if (modules.contains(module)) {
             return;
         }
+        boolean isGameSystem = module instanceof GameSystem;
         // Exclusivity: at most one GameSystem per server. Refused BEFORE onEnable, so the
         // rejected module produces no side effect at all - nothing to roll back.
-        if (module instanceof GameSystem candidate) {
+        if (isGameSystem) {
             GameSystem active = kernel.getService(GameSystem.class);
             if (active != null) {
-                LOGGER.log(Level.ERROR, "A game system is already active (" + active.id()
-                        + "); refusing " + candidate.getClass().getName());
+                LOGGER.log(Level.ERROR, "A game system is already active (" + describe(active)
+                        + "); refusing " + module.getClass().getName());
                 return;
             }
         }
@@ -46,11 +47,39 @@ public class SimpleModuleRegistry implements ModuleRegistry {
                     + " failed to enable and was skipped", e);
             return;
         }
+        // The guard above only sees a system that published itself under GameSystem.class
+        // (see GameSystem's javadoc). One that skipped it is left running on purpose -
+        // refusing here would recreate the half-initialised module the guard exists to
+        // prevent - but exclusivity no longer holds for it, so say so loudly.
+        if (isGameSystem && kernel.getService(GameSystem.class) == null) {
+            LOGGER.log(Level.ERROR, "Game system " + module.getClass().getName()
+                    + " did not publish itself under GameSystem.class in onEnable;"
+                    + " the exclusivity guard cannot see it");
+        }
         modules.add(module);
     }
 
+    /**
+     * Renders an already-active system for a log line without letting a third-party
+     * {@code id()} escape: the exclusivity guard runs outside the onEnable safety net,
+     * and this registry promises never to propagate a module failure.
+     */
+    private static String describe(GameSystem system) {
+        try {
+            return system.id();
+        } catch (Throwable e) {
+            return system.getClass().getName();
+        }
+    }
+
+    // Synchronized like registerModule: without it a module registered concurrently can be
+    // appended after the loop's snapshot and then dropped by clear() without ever seeing
+    // onDisable. Both methods run at boot/shutdown only, so holding the lock across the
+    // callbacks costs nothing.
+    // Note: services registered by these modules are NOT cleared - the kernel has no
+    // unregister. getService(GameSystem.class) therefore still returns the disabled system.
     @Override
-    public void disableAll() {
+    public synchronized void disableAll() {
         for (Module module : modules) {
             try {
                 module.onDisable();
