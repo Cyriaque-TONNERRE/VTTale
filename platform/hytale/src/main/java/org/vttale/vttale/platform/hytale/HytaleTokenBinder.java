@@ -13,6 +13,7 @@ import org.joml.Vector3f;
 import org.vttale.vttale.api.Kernel;
 import org.vttale.vttale.api.events.EventBus;
 import org.vttale.vttale.api.events.EventContext;
+import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.token.CoreTokenType;
 import org.vttale.vttale.api.token.Token;
 import org.vttale.vttale.api.token.TokenPosition;
@@ -22,6 +23,7 @@ import org.vttale.vttale.api.token.events.TokenRemovedEvent;
 import org.vttale.vttale.api.token.events.TokenUpdatedEvent;
 
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
@@ -42,32 +44,31 @@ import java.util.logging.Logger;
  * All Hytale entity access is performed via world.execute() to ensure
  * thread safety with Hytale's ECS system.
  */
-public class HytaleTokenBinder {
+public class HytaleTokenBinder implements Module {
 
     private static final Logger LOGGER = Logger.getLogger(HytaleTokenBinder.class.getName());
 
-    private final Kernel kernel;
-    private final TokenRegistry tokenRegistry;
     private final JavaPlugin plugin;
+    private TokenRegistry tokenRegistry;
 
     /**
      * Creates a new HytaleTokenBinder.
      *
-     * @param kernel        the VTTale kernel
-     * @param tokenRegistry the token service (the caller resolved it; may not be null)
-     * @param plugin        the Hytale plugin instance
+     * @param plugin the Hytale plugin instance
      */
-    public HytaleTokenBinder(Kernel kernel, TokenRegistry tokenRegistry, JavaPlugin plugin) {
-        this.kernel = kernel;
-        this.tokenRegistry = tokenRegistry;
+    public HytaleTokenBinder(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Initializes the binder and registers event listeners.
-     */
-    public void initialize() {
-        LOGGER.info("Initializing HytaleTokenBinder...");
+    @Override
+    public Set<Class<?>> requires() {
+        return Set.of(TokenRegistry.class);
+    }
+
+    @Override
+    public void onEnable(Kernel kernel) {
+        LOGGER.info("Enabling HytaleTokenBinder...");
+        tokenRegistry = kernel.getService(TokenRegistry.class);
 
         EventBus eventBus = kernel.getEventBus();
 
@@ -80,7 +81,12 @@ public class HytaleTokenBinder {
         plugin.getEventRegistry().register(PlayerConnectEvent.class, this::onPlayerConnect);
         plugin.getEventRegistry().register(PlayerDisconnectEvent.class, this::onPlayerDisconnect);
 
-        LOGGER.info("HytaleTokenBinder initialized");
+        LOGGER.info("HytaleTokenBinder enabled");
+    }
+
+    @Override
+    public void onDisable() {
+        LOGGER.info("HytaleTokenBinder disabled");
     }
 
     // ==================== VTTale Token Events ====================
@@ -367,23 +373,5 @@ public class HytaleTokenBinder {
             return Universe.get().getDefaultWorld();
         }
         return Universe.get().getWorld(worldId);
-    }
-
-    /**
-     * Gets the kernel.
-     *
-     * @return the kernel
-     */
-    public Kernel getKernel() {
-        return kernel;
-    }
-
-    /**
-     * Gets the token registry.
-     *
-     * @return the token registry
-     */
-    public TokenRegistry getTokenRegistry() {
-        return tokenRegistry;
     }
 }
