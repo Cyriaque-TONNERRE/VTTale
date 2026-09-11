@@ -382,6 +382,28 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
+    @DisplayName("a module registered from inside another onEnable does not trigger a mid-enable drain")
+    void nestedRegistrationDoesNotDrainDuringOnEnable() {
+        // P is parked on SomeService. M's onEnable registers N, which publishes
+        // SomeService. With the counter guard, N's enable cannot drain P (M's
+        // activation is still in progress), so P activates only after M's
+        // onEnable returned. A boolean guard would be cleared by N's finally,
+        // drain during N's tail, and log P between M:start and M:end.
+        Module m = new RecordingModule("M", log) {
+            @Override
+            public void onEnable(Kernel kernel) {
+                log.add("M:start");
+                registry.registerModule(new SomeServiceProviderModule("N", log));
+                log.add("M:end");
+            }
+        };
+        registry.registerModule(new RecordingModule("P", log, Set.of(SomeService.class)));
+        registry.registerModule(m);
+
+        assertIterableEquals(List.of("M:start", "enable:N", "M:end", "enable:P"), log);
+    }
+
+    @Test
     @DisplayName("a service registered outside any module wakes parked modules")
     void directServiceRegistrationWakesParkedModule() {
         // Use the kernel's own registry: it is the one its registerService notifies.
