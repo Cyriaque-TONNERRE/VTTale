@@ -1,5 +1,6 @@
 package org.vttale.vttale.platform.hytale;
 
+import com.hypixel.hytale.event.EventRegistration;
 import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.event.events.player.PlayerConnectEvent;
@@ -13,6 +14,7 @@ import org.joml.Vector3f;
 import org.vttale.vttale.api.Kernel;
 import org.vttale.vttale.api.events.EventBus;
 import org.vttale.vttale.api.events.EventContext;
+import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.token.CoreTokenType;
 import org.vttale.vttale.api.token.Token;
 import org.vttale.vttale.api.token.TokenPosition;
@@ -21,9 +23,12 @@ import org.vttale.vttale.api.token.events.TokenBoundEvent;
 import org.vttale.vttale.api.token.events.TokenRemovedEvent;
 import org.vttale.vttale.api.token.events.TokenUpdatedEvent;
 
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -42,32 +47,40 @@ import java.util.logging.Logger;
  * All Hytale entity access is performed via world.execute() to ensure
  * thread safety with Hytale's ECS system.
  */
-public class HytaleTokenBinder {
+public class HytaleTokenBinder implements Module {
 
     private static final Logger LOGGER = Logger.getLogger(HytaleTokenBinder.class.getName());
 
-    private final Kernel kernel;
-    private final TokenRegistry tokenRegistry;
     private final JavaPlugin plugin;
+    private TokenRegistry tokenRegistry;
+    // Set in onDisable before anything else: the single kill switch for all
+    // five handlers. Kernel subscriptions cannot be removed at all; Hytale
+    // ones are unregistered too, but the flag closes the race window between
+    // onDisable and unregister. Volatile: events arrive from world threads,
+    // onDisable runs on another.
+    private volatile boolean disabled;
+    // Null until onEnable: a parked module is disabled without having been enabled.
+    private EventRegistration<Void, PlayerConnectEvent> playerConnectRegistration;
+    private EventRegistration<Void, PlayerDisconnectEvent> playerDisconnectRegistration;
 
     /**
      * Creates a new HytaleTokenBinder.
      *
-     * @param kernel        the VTTale kernel
-     * @param tokenRegistry the token service (the caller resolved it; may not be null)
-     * @param plugin        the Hytale plugin instance
+     * @param plugin the Hytale plugin instance
      */
-    public HytaleTokenBinder(Kernel kernel, TokenRegistry tokenRegistry, JavaPlugin plugin) {
-        this.kernel = kernel;
-        this.tokenRegistry = tokenRegistry;
+    public HytaleTokenBinder(JavaPlugin plugin) {
         this.plugin = plugin;
     }
 
-    /**
-     * Initializes the binder and registers event listeners.
-     */
-    public void initialize() {
-        LOGGER.info("Initializing HytaleTokenBinder...");
+    @Override
+    public Set<Class<?>> requires() {
+        return Set.of(TokenRegistry.class);
+    }
+
+    @Override
+    public void onEnable(Kernel kernel) {
+        LOGGER.info("Enabling HytaleTokenBinder...");
+        tokenRegistry = kernel.getService(TokenRegistry.class);
 
         EventBus eventBus = kernel.getEventBus();
 
@@ -77,10 +90,36 @@ public class HytaleTokenBinder {
         eventBus.subscribe(TokenRemovedEvent.class, this::onTokenRemoved);
 
         // Listen for Hytale player events
-        plugin.getEventRegistry().register(PlayerConnectEvent.class, this::onPlayerConnect);
-        plugin.getEventRegistry().register(PlayerDisconnectEvent.class, this::onPlayerDisconnect);
+        playerConnectRegistration = plugin.getEventRegistry().register(PlayerConnectEvent.class, this::onPlayerConnect);
+        playerDisconnectRegistration = plugin.getEventRegistry().register(PlayerDisconnectEvent.class, this::onPlayerDisconnect);
 
-        LOGGER.info("HytaleTokenBinder initialized");
+        LOGGER.info("HytaleTokenBinder enabled");
+    }
+
+    @Override
+    public void onDisable() {
+        disabled = true;
+        unregisterQuietly(playerConnectRegistration);
+        unregisterQuietly(playerDisconnectRegistration);
+        playerConnectRegistration = null;
+        playerDisconnectRegistration = null;
+        LOGGER.info("HytaleTokenBinder disabled");
+    }
+
+    /**
+     * Unregisters one Hytale event listener. One failure must not prevent the
+     * next unregister, and a null registration (parked module never enabled,
+     * or already disabled) is a no-op - double disable stays safe.
+     */
+    private static void unregisterQuietly(EventRegistration<Void, ?> registration) {
+        if (registration == null) {
+            return;
+        }
+        try {
+            registration.unregister();
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Failed to unregister " + registration.getEventClass().getSimpleName(), e);
+        }
     }
 
     // ==================== VTTale Token Events ====================
@@ -89,6 +128,9 @@ public class HytaleTokenBinder {
      * Handles token binding/unbinding events.
      */
     private void onTokenBound(TokenBoundEvent event, EventContext context) {
+        if (disabled) {
+            return;
+        }
         Token token = event.getToken();
 
         // Handles token binding/unbinding; logs and syncs as needed
@@ -110,6 +152,9 @@ public class HytaleTokenBinder {
      * Handles token update events.
      */
     private void onTokenUpdated(TokenUpdatedEvent event, EventContext context) {
+        if (disabled) {
+            return;
+        }
         Token token = event.getToken();
 
         // Only sync if token is bound to an entity
@@ -129,6 +174,9 @@ public class HytaleTokenBinder {
      * Handles token removal events.
      */
     private void onTokenRemoved(TokenRemovedEvent event, EventContext context) {
+        if (disabled) {
+            return;
+        }
         // If the token was bound to an entity, log it
         // Note: We don't auto-despawn entities here, as the entity might be
         // a player or have other purposes. Let the caller handle despawning.
@@ -143,6 +191,9 @@ public class HytaleTokenBinder {
      * Handles player connection - creates a token for the player.
      */
     private void onPlayerConnect(PlayerConnectEvent event) {
+        if (disabled) {
+            return;
+        }
         PlayerRef playerRef = event.getPlayerRef();
         World world = event.getWorld();
 
@@ -185,6 +236,9 @@ public class HytaleTokenBinder {
      * Handles player disconnection.
      */
     private void onPlayerDisconnect(PlayerDisconnectEvent event) {
+        if (disabled) {
+            return;
+        }
         PlayerRef playerRef = event.getPlayerRef();
 
         // Find and unbind the player's token (but don't remove it)
@@ -267,6 +321,7 @@ public class HytaleTokenBinder {
      * @return the created token
      */
     public Token createTokenForPlayer(UUID playerId, String playerName) {
+        Objects.requireNonNull(tokenRegistry, "binder not enabled");
         Token token = tokenRegistry.create(playerName, CoreTokenType.PLAYER_CHARACTER, playerId);
         LOGGER.info("Created token for player: " + playerName);
         return token;
@@ -329,6 +384,7 @@ public class HytaleTokenBinder {
      * @return true if the entity was despawned
      */
     public boolean despawnEntityForToken(Token token) {
+        Objects.requireNonNull(tokenRegistry, "binder not enabled");
         UUID entityId = token.getBoundEntityId().orElse(null);
         if (entityId == null) {
             return false;
@@ -367,23 +423,5 @@ public class HytaleTokenBinder {
             return Universe.get().getDefaultWorld();
         }
         return Universe.get().getWorld(worldId);
-    }
-
-    /**
-     * Gets the kernel.
-     *
-     * @return the kernel
-     */
-    public Kernel getKernel() {
-        return kernel;
-    }
-
-    /**
-     * Gets the token registry.
-     *
-     * @return the token registry
-     */
-    public TokenRegistry getTokenRegistry() {
-        return tokenRegistry;
     }
 }
