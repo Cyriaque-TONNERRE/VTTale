@@ -264,15 +264,70 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
-    @DisplayName("disableAll releases reserved ids")
-    void disableAllReleasesIds() {
+    @DisplayName("after disableAll() the registry is closed: registerModule is refused")
+    void registerAfterCloseIsRefused() {
         registry.registerModule(new RecordingModule("a", log));
         registry.disableAll();
 
+        registry.registerModule(new RecordingModule("late", log));
+
+        // Refused: no onEnable, no id reservation, nothing in the lists.
+        assertIterableEquals(List.of("enable:a", "disable:a"), log);
+    }
+
+    @Test
+    @DisplayName("a module registered from inside an onDisable is refused, never enabled")
+    void registrationFromOnDisableIsRefused() {
+        Module selfish = new RecordingModule("selfish", log) {
+            @Override
+            public void onDisable() {
+                log.add("disable:selfish:start");
+                registry.registerModule(new RecordingModule("sneaky", log));
+                log.add("disable:selfish:end");
+            }
+        };
         registry.registerModule(new RecordingModule("a", log));
+        registry.registerModule(selfish);
+
         registry.disableAll();
 
-        assertIterableEquals(List.of("enable:a", "disable:a", "enable:a", "disable:a"), log);
+        // Reverse order: selfish disables first and tries to smuggle "sneaky"
+        // in — refused, because the registry closed before the loop. Otherwise
+        // sneaky would be enabled mid-teardown, then cleared by modules.clear()
+        // without ever seeing onDisable.
+        assertIterableEquals(List.of(
+                "enable:a", "enable:selfish",
+                "disable:selfish:start", "disable:selfish:end",
+                "disable:a"), log);
+    }
+
+    @Test
+    @DisplayName("a service registered from inside an onDisable wakes nothing")
+    void serviceFromOnDisableWakesNothing() {
+        // The modules must live in the kernel's own registry: it is the one
+        // registerService notifies, and only a drain of THAT registry could
+        // wake "parked" mid-teardown (see directServiceRegistrationWakesParkedModule).
+        SimpleModuleRegistry kernelRegistry = (SimpleModuleRegistry) kernel.getModuleRegistry();
+        Module provider = new RecordingModule("provider", log) {
+            @Override
+            public void onDisable() {
+                log.add("disable:provider:start");
+                kernel.registerService(SomeService.class, new SomeService() {
+                });
+                log.add("disable:provider:end");
+            }
+        };
+        kernelRegistry.registerModule(new RecordingModule("parked", log, Set.of(SomeService.class)));
+        kernelRegistry.registerModule(provider);
+
+        kernelRegistry.disableAll();
+
+        // The service lands in the kernel, but the drain is closed: "parked"
+        // must not activate mid-teardown (it would be cleared without
+        // onDisable). It stays parked, and parked modules never see onDisable.
+        assertIterableEquals(List.of(
+                "enable:provider",
+                "disable:provider:start", "disable:provider:end"), log);
     }
 
     @Test
