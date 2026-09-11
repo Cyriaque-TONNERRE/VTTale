@@ -113,8 +113,10 @@ la vraie solution — prévue pour plus tard, pas dans ce correctif.
 - Appelé une fois, en ordre inverse d'activation (dépendants avant
   fournisseurs) — jamais deux fois, même en cas de double `disableAll()`.
 - C'est l'endroit où sauvegarder : services et bus encore fonctionnels.
-- La sauvegarde doit être **rapide et synchrone** : le `Runtime.halt()`
-  programmé par Hytale peut couper un I/O lent (voir « Point ouvert »).
+- La sauvegarde doit être rapide et synchrone, sans attente indéfinie (pas de
+  `join()`/`get()` sans timeout, pas de verrou externe) : un `onDisable`
+  bloqué suspend l'arrêt du serveur tout entier (voir « La fenêtre de 3 s —
+  vérifiée »).
 - Ne pas y appeler `world.execute(...)` : une tâche mise en file d'attente
   sur le thread du monde peut ne jamais tourner pendant l'arrêt. Sérialiser
   l'état déjà présent dans le kernel, sans relire le monde.
