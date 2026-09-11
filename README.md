@@ -30,7 +30,7 @@ A single Hytale plugin JAR embeds everything:
 | `gamesystem` | Game systems — `dnd5e` is the example skeleton |
 | `platform/hytale` | The Hytale plugin: bootstrap, bridge to the game API |
 
-See `docs/architecture.md` (French) for details and the "write a module" guide.
+See `docs/architecture.md` for details and the "write a module" guide.
 
 ## Build
 

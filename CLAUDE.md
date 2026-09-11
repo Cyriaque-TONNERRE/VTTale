@@ -15,7 +15,7 @@ VTTale turns a Hytale server into a tabletop RPG platform. It is a **framework**
 
 - Language: Java 25. Build: Gradle (wrapper 9.7.1, Kotlin DSL). `platform:hytale` uses `com.azuredoom.hytale-tools` (pinned) to resolve the Hytale Server dependency and generate `manifest.json`; `com.gradleup.shadow` bundles the single deployable fat JAR.
 - Origin: fork of https://github.com/VTTaleTeam/VTTale (branch `poc/VTT-38-Token-Registry`). README credits the original contributors — keep them.
-- Project documentation (French): `docs/architecture.md` (framework + module-author guide) and `docs/superpowers/specs/` (dated design specs — one per feature, source of truth for its area). Update `docs/architecture.md` when changing architecture or commands.
+- Project documentation: `docs/architecture.md` (English) / `docs/architecture.fr.md` (French) — framework + module-author guide; `docs/superpowers/specs/` (dated design specs in French — one per feature, source of truth for its area). Update the architecture docs when changing architecture or commands.
 - Old local references: Hytale decompiled sources (no assets) at `C:\Users\Siryak\Documents\HytaleSource\{HytaleServer,HytaleClient,Protocol}`; previous prototype repo at `C:\Users\Siryak\Documents\TTTALE` (read-only reference, never commit there).
 
 ## Architecture

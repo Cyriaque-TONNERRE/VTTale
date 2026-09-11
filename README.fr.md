@@ -30,7 +30,8 @@ Un seul JAR plugin Hytale embarque tout :
 | `gamesystem` | Systèmes de jeu — `dnd5e` sert d'exemple de squelette |
 | `platform/hytale` | Le plugin Hytale : bootstrap, pont vers l'API du jeu |
 
-Voir `docs/architecture.md` pour le détail et le parcours « écrire un module ».
+Voir `docs/architecture.fr.md` pour le détail et le parcours « écrire un
+module » (version anglaise : `docs/architecture.md`).
 
 ## Build
 

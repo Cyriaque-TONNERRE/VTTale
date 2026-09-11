@@ -1,183 +1,189 @@
-# Architecture de VTTale
+# VTTale Architecture
 
-VTTale est un **framework** : le noyau fournit les briques (bus, tokens,
-behaviors, commandes, services), le gameplay s'écrit en modules sans jamais
-modifier le noyau.
+> Documentation en français : [architecture.fr.md](architecture.fr.md)
 
-> **Sources de vérité** : les specs datées de
-> [`docs/superpowers/specs/`](superpowers/specs/) — design du framework
-> (2026-09-09), contrat GameSystem (2026-09-10), dépendances de modules et
-> activation différée (2026-09-11).
-> Ce document est un résumé pour les auteurs de modules ; en cas de divergence,
-> les specs priment.
+VTTale is a **framework**: the kernel provides the building blocks (event bus,
+tokens, behaviors, commands, services), and gameplay is written as modules on
+top — without ever modifying the kernel.
 
-## Vue d'ensemble
+> **Sources of truth**: the dated specs in
+> [`docs/superpowers/specs/`](superpowers/specs/) — framework design
+> (2026-09-09), GameSystem contract (2026-09-10), module dependencies and
+> deferred activation (2026-09-11). (Specs are written in French.)
+> This document is a summary for module authors; on any divergence, the specs
+> win.
 
-Un seul JAR plugin Hytale embarque tout le framework :
+## Overview
+
+A single Hytale plugin JAR embeds the whole framework:
 
 ```
 VTTale/
-├── api/                 # contrats purs, org.vttale.vttale.api — ZÉRO import Hytale
-├── kernel/              # impls simples (VTTaleKernel, SimpleEventBus, registries)
-├── module/              # modules intégrés : chat, diceroll, token
-├── gamesystem/          # dnd5e — squelette d'exemple de système de jeu
-└── platform/hytale/     # LE plugin Hytale : bootstrap + pont vers l'API du jeu
+├── api/                 # pure contracts, org.vttale.vttale — ZERO Hytale imports
+├── kernel/              # simple impls (VTTaleKernel, SimpleEventBus, registries)
+├── module/              # built-in modules: chat, diceroll, token
+├── gamesystem/          # dnd5e — example skeleton of a game system
+└── platform/hytale/     # THE Hytale plugin: bootstrap + bridge to the game API
 ```
 
-Seul `platform/hytale` connaît l'API Hytale. `api`, `kernel`, `module` et
-`gamesystem` sont du Java pur, exécutables hors serveur.
+Only `platform/hytale` knows the Hytale API. `api`, `kernel`, `module` and
+`gamesystem` are pure Java and run outside the server.
 
-## Noyau : façade + conteneur de services
+## Kernel: facade + service container
 
-`VTTale.getKernel()` est une façade statique : le platform crée le kernel
-(`new VTTaleKernel()`) et l'injecte via `VTTale.init(kernel)`. Pas de SPI —
-une seule implémentation, la nôtre.
+`VTTale.getKernel()` is a static facade: the platform creates the kernel
+(`new VTTaleKernel()`) and injects it via `VTTale.init(kernel)`. No SPI — a
+single implementation, ours.
 
-`Kernel` est un **conteneur de services extensible** :
+`Kernel` is an **extensible service container**:
 
-- fixes : `getEventBus()`, `getCommandRegistry()`, `getModuleRegistry()` ;
-- extensible : `getService(Class<T>)` / `registerService(Class<T>, T)`.
+- fixed: `getEventBus()`, `getCommandRegistry()`, `getModuleRegistry()`;
+- extensible: `getService(Class<T>)` / `registerService(Class<T>, T)`.
 
-Toute capacité nouvelle (`TokenRegistry`, `BehaviorDispatcher`, …) est un
-**service posé par un module** — jamais un accesseur codé en dur dans le
-noyau. Un module qui ajoute une capacité la publie ainsi, les autres la
-consomment avec `getService(...)`.
+Every new capability (`TokenRegistry`, `BehaviorDispatcher`, …) is a
+**service registered by a module** — never a hardcoded accessor in the kernel.
+A module that adds a capability publishes it this way; the others consume it
+with `getService(...)`.
 
-## Modules : cycle de vie et enregistrement
+## Modules: lifecycle and registration
 
-`Module` est l'unique point d'extension : `onEnable(Kernel)` / `onDisable()`,
-plus deux déclarations optionnelles :
+`Module` is the single extension point: `onEnable(Kernel)` / `onDisable()`,
+plus two optional declarations:
 
-- **`id()`** — identifiant stable, unique parmi tous les modules installés ;
-  le registre refuse un doublon. Default : nom de classe pleinement qualifié.
-  Overridez avec un id namespacé (`"vttale:chat"`) pour des logs lisibles.
-  Une classe de module est un singleton par serveur : deux instances de la
-  même classe partagent le même id par défaut, la seconde est refusée.
-- **`requires()`** — services qui doivent exister avant l'activation, lus via
-  `getService` dans `onEnable` (ex. `Set.of(DiceService.class)`). Vide par
-  défaut.
+- **`id()`** — a stable identifier, unique among all installed modules; the
+  registry refuses duplicates. Default: fully qualified class name. Override
+  with a namespaced id (`"vttale:chat"`) for readable logs. A module class is
+  a singleton per server: two instances of the same class share the same
+  default id, and the second is refused.
+- **`requires()`** — services that must exist before activation, read via
+  `getService` inside `onEnable` (e.g. `Set.of(DiceService.class)`). Empty by
+  default.
 
-**L'ordre d'enregistrement n'a plus d'importance pour ces dépendances** : un
-module dont les services requis manquent est mis en parc et s'active au
-moment où ils apparaissent. En fin de démarrage, la plateforme logge en
-ERROR les modules encore en attente avec les services manquants — un module
-qui ne s'active jamais a un service requis jamais arrivé.
+**Registration order no longer matters for these dependencies**: a module
+whose required services are missing is parked and activated when they appear.
+At the end of boot, the platform logs an ERROR report of still-parked modules
+with their missing services — a module that never activates is waiting for a
+service that never arrived.
 
-Le couplage par événements n'est **pas** une dépendance : abonnement à
-l'activation, publication à l'exécution, aucun ordre contraint. Ne déclarez
-jamais un événement en `requires()`.
+Event coupling is **not** a dependency: subscribing happens at enable time and
+publishing at runtime, so no order is constrained. Never declare an event in
+`requires()`.
 
-Deux modes d'enregistrement :
+Two registration modes:
 
-| Mode | Qui | Comment |
+| Mode | Who | How |
 |---|---|---|
-| **Embarqué** | le platform | `registerModule(new ChatModule())`, … — liste lisible ; seul `HytaleAdapter` doit rester premier (pont de commandes, invisible à `requires()`) |
-| **Tiers** | le plugin Hytale du module | dans son `setup()` : `VTTale.getKernel().getModuleRegistry().registerModule(new MonModule())` |
+| **Bundled** | the platform | `registerModule(new ChatModule())`, … — a readable list; only `HytaleAdapter` must stay first (command bridge, invisible to `requires()`) |
+| **Third-party** | the module's Hytale plugin | in its `setup()`: `VTTale.getKernel().getModuleRegistry().registerModule(new MyModule())` |
 
-Les classloaders Hytale sont isolés par JAR : aucun mécanisme de découverte
-cross-JAR n'existe. L'auto-enregistrement dans `setup()` est donc le seul
-chemin pour un module tiers.
+Hytale classloaders are isolated per JAR: no cross-JAR discovery mechanism
+exists. Self-registration from `setup()` is therefore the only path for a
+third-party module.
 
-## Systèmes de jeu
+## Game systems
 
-Un système de jeu (D&D 5e, Pathfinder 2e, …) est un `GameSystem` :
-un `Module` qui porte en plus son identité — `id()`, `version()`,
-`components()` (types de composants possédés, informatif pour l'instant).
+A game system (D&D 5e, Pathfinder 2e, …) is a `GameSystem`: a `Module` that
+additionally carries its identity — `id()`, `version()`, `components()` (owned
+component types, informational for now).
 
-**Un seul actif par serveur.** `SimpleModuleRegistry` refuse un second
-`GameSystem` **avant** son `onEnable` : zéro effet de bord, log d'erreur,
-le serveur démarre. Le contrat est lu ainsi :
+**Exactly one active per server.** `SimpleModuleRegistry` refuses a second
+`GameSystem` **before** its `onEnable`: zero side effects, error log, the
+server starts. The contract is read as:
 
-- système actif : `kernel.getService(GameSystem.class)` ;
-- enregistrement : le système fait `kernel.registerService(GameSystem.class, this)`
-  dans son `onEnable` (pattern DiceService) — **sans cet enregistrement, la garde
-  d'exclusivité ne détecte pas votre système**.
+- active system: `kernel.getService(GameSystem.class)`;
+- registration: the system does
+  `kernel.registerService(GameSystem.class, this)` in its `onEnable`
+  (DiceService pattern) — **without that registration, the exclusivity guard
+  cannot see your system**.
 
-Écrire un système de jeu = écrire un module qui implémente `GameSystem`
-au lieu de `Module` ; le reste (commandes, events, behaviors, services)
-ne change pas.
+Writing a game system = writing a module that implements `GameSystem` instead
+of `Module`; everything else (commands, events, behaviors, services) is
+unchanged.
 
-## Bus d'événements
+## Event bus
 
-Synchrone et typé : `publish(event, EventContext)` /
-`subscribe(Class, BiConsumer)`, avec **priorités** (ordre croissant, le plus
-bas d'abord ; égalité = ordre d'abonnement). Un `publish` ne rend la main
-qu'après tous les handlers — une action de table (lancer → appliquer →
-notifier) se termine toujours avant que l'appelant continue.
+Synchronous and typed: `publish(event, EventContext)` /
+`subscribe(Class, BiConsumer)`, with **priorities** (ascending order, lowest
+first; ties = subscription order). A `publish` returns only after every
+handler — a table action (roll → apply → notify) always completes before the
+caller continues.
 
-`EventContext` porte le `senderId` : UUID joueur, `"CONSOLE"` ou `"KERNEL"`.
+`EventContext` carries the `senderId`: player UUID, `"CONSOLE"` or
+`"KERNEL"`.
 
-## Flux des commandes
+## Command flow
 
-Les modules ne voient jamais l'API Hytale :
+Modules never see the Hytale API:
 
 ```
 CommandRegistry.registerCommand(name, description[, options])
-→ publie RegisterCommandRequest
-→ HytaleAdapter binde au système de commandes Hytale
-  (avec rattrapage des commandes enregistrées avant son activation)
-→ CommandExecutedEvent (le module reçoit l'invocation)
-→ réponses via PlatformBroadcastEvent (CONSOLE ou PlayerRef)
+→ publishes RegisterCommandRequest
+→ HytaleAdapter binds it to the Hytale command system
+  (catching up on commands registered before its own activation)
+→ CommandExecutedEvent (the module receives the invocation)
+→ replies via PlatformBroadcastEvent (CONSOLE or PlayerRef)
 ```
 
-## Modèle token
+## Token model
 
-`Token` = identité + **Components** + **tags** + **Behaviors** :
+`Token` = identity + **Components** + **tags** + **Behaviors**:
 
-- **Components** = données game-system posées par les modules
-  (`record StatBlock(...) implements TokenComponent`). Rien que des données.
-- **tags** = filtres pour les requêtes (`TokenQuery` : type/tag/owner/range).
-- **Behaviors** = logique attachable (`onAttach`/`onDetach`/`onEvent`),
-  identifiés `namespace:name`. Leur état est **privé**, dans leur
-  `BehaviorContext` (KV typé) — jamais sur le token.
-- **`BehaviorEvent`** : événement de jeu ciblant `targetToken`/`sourceToken`,
-  annulable par convention (`isCancelled()`).
-- **`BehaviorDispatcher`** (service) : `dispatch`, `dispatchTo(event, tokens)`,
-  `broadcast`, listeners globaux.
+- **Components** = game-system data placed by modules
+  (`record StatBlock(...) implements TokenComponent`). Data only.
+- **tags** = query filters (`TokenQuery`: type/tag/owner/range).
+- **Behaviors** = attachable logic (`onAttach`/`onDetach`/`onEvent`),
+  identified as `namespace:name`. Their state is **private**, in their
+  `BehaviorContext` (typed KV) — never on the token.
+- **`BehaviorEvent`**: a game event targeting `targetToken`/`sourceToken`,
+  cancellable by convention (`isCancelled()`).
+- **`BehaviorDispatcher`** (a service): `dispatch`, `dispatchTo(event, tokens)`,
+  `broadcast`, global listeners.
 
-Une « réaction » (opportunity attack…) n'est donc pas un module du noyau :
-c'est un Behavior qu'un système de jeu attache aux tokens. Aucun listener figé.
+A "reaction" (opportunity attack…) is therefore not a kernel module: it is a
+Behavior a game system attaches to tokens. No hardcoded listeners.
 
-### Événements de cycle de vie token
+### Token lifecycle events
 
 `TokenCreatedEvent`, `TokenRemovedEvent`, `TokenUpdatedEvent`,
-`TokenBoundEvent` — **c'est tout**. Déplacement, sélection, position et toute
-autre mutation passent par `TokenUpdatedEvent` : pas d'événements dédiés
-`Moved`/`Selected`/`Placed`.
+`TokenBoundEvent` — **that is all**. Movement, selection, position and every
+other mutation go through `TokenUpdatedEvent`: no dedicated
+`Moved`/`Selected`/`Placed` events.
 
-Flux type :
+Typical flow:
 
 ```
 /token move X → CommandRegistry → CommandExecutedEvent
-→ module token : met à jour le token → publish TokenUpdatedEvent
-→ chaque module réagit librement à l'événement bus
-→ logique métier ciblée = BehaviorDispatcher.dispatch(MonBehaviorEvent)
-  → behaviors attachés aux tokens concernés (état privé, annulable)
+→ token module: updates the token → publishes TokenUpdatedEvent
+→ every module reacts freely to the bus event
+→ targeted game logic = BehaviorDispatcher.dispatch(MyBehaviorEvent)
+  → behaviors attached to the affected tokens (private state, cancellable)
 ```
 
-## Gestion d'erreurs
+## Error handling
 
-- **Bus** : une exception dans un handler est loggée via le logger du platform
-  (jamais `printStackTrace`), les handlers suivants s'exécutent quand même.
-- **`Module.onEnable` qui jette** : le module est ignoré, log d'erreur, le
-  serveur démarre. Un module cassé ne tue jamais le serveur.
-- **`requires()` jamais satisfaites** : le module reste parqué (log INFO à la
-  mise en parc) ; rapport ERROR en fin de démarrage listant les services
-  manquants. Un module parqué ne voit jamais `onEnable` ni `onDisable`.
-- **Second `GameSystem` refusé** : refusé avant tout effet de bord (pas
-  d'`onEnable` du tout), log d'erreur, le premier système reste actif.
+- **Bus**: an exception in a handler is logged through the platform logger
+  (never `printStackTrace`); the following handlers still run.
+- **`Module.onEnable` that throws**: the module is skipped, error logged, the
+  server starts. A broken module never kills the server. Services it
+  registered before throwing stay in the kernel (no rollback) and wake their
+  dependents like any other service.
+- **Unsatisfied `requires()`**: the module stays parked (INFO log at park
+  time); an ERROR report at the end of boot lists the missing services. A
+  parked module never sees `onEnable` nor `onDisable`.
+- **Second `GameSystem` refused**: refused before any side effect (no
+  `onEnable` at all), error logged, the first system stays active.
 
-## Parcours d'un dev tiers
+## Third-party developer path
 
-1. **Code** : `class MonModule implements Module` — composants, behaviors,
-   événements, tout Java pur : api, kernel et modules ne dépendent d'aucune
-   classe Hytale et s'exécutent hors serveur.
-2. **Livraison** :
-   - **JAR tiers** (cas standard) : plugin Hytale avec manifest
-     `Dependencies: VTTALE:vttale=*` ; dans `setup()` : enregistrement du
-     module. Le classloader bridge rend api/kernel visibles.
-   - **Embarqué** : contribution au repo → classe référencée dans la liste
-     d'enregistrement du platform.
-3. **Réutilisation** : services kernel (`getService(TokenRegistry.class)`,
-   `getService(BehaviorDispatcher.class)`), événements des autres modules,
-   CommandRegistry pour ses commandes.
+1. **Code**: `class MyModule implements Module` — components, behaviors,
+   events, all pure Java: api, kernel and modules depend on no Hytale class
+   and run outside the server.
+2. **Delivery**:
+   - **Third-party JAR** (standard case): a Hytale plugin whose manifest
+     declares `Dependencies: VTTALE:vttale=*`; in `setup()`: register the
+     module. The bridge classloader makes api/kernel visible.
+   - **Bundled**: contribute to the repo → class referenced in the platform's
+     registration list.
+3. **Reuse**: kernel services (`getService(TokenRegistry.class)`,
+   `getService(BehaviorDispatcher.class)`), other modules' events,
+   `CommandRegistry` for your commands.
