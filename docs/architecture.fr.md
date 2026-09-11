@@ -80,6 +80,26 @@ Les classloaders Hytale sont isolés par JAR : aucun mécanisme de découverte
 cross-JAR n'existe. L'auto-enregistrement dans `setup()` est donc le seul
 chemin pour un module tiers.
 
+**Arrêt** : Hytale appelle le `shutdown()` du plugin à l'arrêt du serveur —
+ou quand le plugin lui-même est déchargé — pendant que le monde, le bus
+d'événements Hytale et les registres sont encore vivants. La plateforme
+répond par `ModuleRegistry.disableAll()` : chaque
+module voit `onDisable()` une fois, en ordre inverse d'activation (dépendants
+avant fournisseurs), puis le registre est fermé pour de bon — un
+`registerModule` ensuite est refusé. `onDisable` est le **point de save** :
+les services restent enregistrés et le bus kernel y fonctionne. Gardez les
+saves rapides et synchrones (un save qui bloque suspend l'arrêt du serveur) ;
+n'y mettez pas de travail au monde en file (`world.execute(...)` — une tâche
+soumise pendant l'arrêt peut ne jamais tourner) et n'y enregistrez ni module
+ni service.
+
+Ordre inter-plugins : Hytale arrête les plugins en ordre inverse des
+dépendances, donc le `shutdown()` et le `cleanup()` de **votre** plugin
+tournent **avant** ceux de VTTale. Sauvegarder l'état kernel depuis
+l'`onDisable` de votre module marche ; toucher là à vos propres
+enregistrements Hytale est trop tard — démontez-les dans le `shutdown()` de
+votre plugin.
+
 ## Systèmes de jeu
 
 Un système de jeu (D&D 5e, Pathfinder 2e, …) est un `GameSystem` :

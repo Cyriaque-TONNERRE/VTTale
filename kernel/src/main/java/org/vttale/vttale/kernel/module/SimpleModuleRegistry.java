@@ -20,7 +20,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>
  * A module whose required services are not registered yet is parked and
  * activated when they appear (see {@link #drainPending()}). A module id is
- * reserved at registration and never released until {@link #disableAll()}.
+ * reserved at registration and released only by
+ * {@link #disableAll()}, which also closes the registry for good:
+ * afterwards {@link #registerModule} logs an error and refuses.
  */
 public class SimpleModuleRegistry implements ModuleRegistry {
 
@@ -40,6 +42,13 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     private int activating = 0;
     private boolean draining = false;
     private boolean dirty = false;
+    // Set at the ENTRY of disableAll, before the onDisable loop: Java locks
+    // are reentrant, so an onDisable that calls registerModule (or
+    // registerService, which triggers drainPending) re-enters the registry
+    // mid-teardown. Raised first, that code is refused instead of being
+    // activated here and cleared below without ever seeing onDisable.
+    // No reopen path: the plugin boots once per JVM, the registry stays closed.
+    private boolean closed = false;
 
     public SimpleModuleRegistry(Kernel kernel) {
         this.kernel = kernel;
@@ -47,6 +56,10 @@ public class SimpleModuleRegistry implements ModuleRegistry {
 
     @Override
     public synchronized void registerModule(Module module) {
+        if (closed) {
+            LOGGER.log(Level.ERROR, "Module " + idOf(module) + " refused: the registry is closed");
+            return;
+        }
         if (modules.contains(module) || pending.contains(module)) {
             return;
         }
@@ -139,6 +152,9 @@ public class SimpleModuleRegistry implements ModuleRegistry {
      * module. Invisible at boot scale; revisit if the parked set ever grows.
      */
     private synchronized void drainPending() {
+        if (closed) {
+            return;
+        }
         if (activating > 0 || draining) {
             dirty = true;
             return;
@@ -259,6 +275,13 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     // unregister. getService(GameSystem.class) therefore still returns the disabled system.
     @Override
     public synchronized void disableAll() {
+        if (closed) {
+            return; // already shut down - covers a re-entrant call from an onDisable
+        }
+        // Closed BEFORE the loop, not after: an onDisable that re-enters the
+        // registry must be refused, not activated mid-teardown (see the field
+        // comment). Second call: empty lists, closed already true — a no-op.
+        closed = true;
         // Reverse activation order: a dependent shuts down before its provider
         // (activation order is a topological order of the dependency graph).
         for (int i = modules.size() - 1; i >= 0; i--) {

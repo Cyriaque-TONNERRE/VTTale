@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.vttale.vttale.api.Kernel;
+import org.vttale.vttale.api.events.Event;
+import org.vttale.vttale.api.events.EventContext;
 import org.vttale.vttale.api.gamesystem.GameSystem;
 import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.token.TokenComponent;
@@ -264,15 +266,95 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
-    @DisplayName("disableAll releases reserved ids")
-    void disableAllReleasesIds() {
+    @DisplayName("after disableAll() the registry is closed: registerModule is refused")
+    void registerAfterCloseIsRefused() {
         registry.registerModule(new RecordingModule("a", log));
         registry.disableAll();
 
+        registry.registerModule(new RecordingModule("late", log));
+
+        // Refused: no onEnable, no id reservation, nothing in the lists.
+        assertIterableEquals(List.of("enable:a", "disable:a"), log);
+    }
+
+    @Test
+    @DisplayName("disableAll re-entered from an onDisable is a no-op: each module disables exactly once")
+    void reentrantDisableAllIsIgnored() {
         registry.registerModule(new RecordingModule("a", log));
+        registry.registerModule(new RecordingModule("self", log) {
+            @Override
+            public void onDisable() {
+                log.add("disable:self:start");
+                registry.disableAll();
+                log.add("disable:self:end");
+            }
+        });
+
         registry.disableAll();
 
-        assertIterableEquals(List.of("enable:a", "disable:a", "enable:a", "disable:a"), log);
+        // Reverse order: "self" disables first and re-enters disableAll —
+        // refused because the registry is already closed, so there is no
+        // recursion and "a" is not disabled twice. The outer loop then
+        // disables "a" exactly once.
+        assertIterableEquals(List.of(
+                "enable:a", "enable:self",
+                "disable:self:start", "disable:self:end",
+                "disable:a"), log);
+    }
+
+    @Test
+    @DisplayName("a module registered from inside an onDisable is refused, never enabled")
+    void registrationFromOnDisableIsRefused() {
+        Module selfish = new RecordingModule("selfish", log) {
+            @Override
+            public void onDisable() {
+                log.add("disable:selfish:start");
+                registry.registerModule(new RecordingModule("sneaky", log));
+                log.add("disable:selfish:end");
+            }
+        };
+        registry.registerModule(new RecordingModule("a", log));
+        registry.registerModule(selfish);
+
+        registry.disableAll();
+
+        // Reverse order: selfish disables first and tries to smuggle "sneaky"
+        // in — refused, because the registry closed before the loop. Otherwise
+        // sneaky would be enabled mid-teardown, then cleared by modules.clear()
+        // without ever seeing onDisable.
+        assertIterableEquals(List.of(
+                "enable:a", "enable:selfish",
+                "disable:selfish:start", "disable:selfish:end",
+                "disable:a"), log);
+    }
+
+    @Test
+    @DisplayName("a service registered from inside an onDisable wakes nothing")
+    void serviceFromOnDisableWakesNothing() {
+        // The modules must live in the kernel's own registry: it is the one
+        // registerService notifies, and only a drain of THAT registry could
+        // wake "parked" mid-teardown (see directServiceRegistrationWakesParkedModule).
+        SimpleModuleRegistry kernelRegistry = (SimpleModuleRegistry) kernel.getModuleRegistry();
+        Module provider = new RecordingModule("provider", log) {
+            @Override
+            public void onDisable() {
+                log.add("disable:provider:start");
+                kernel.registerService(SomeService.class, new SomeService() {
+                });
+                log.add("disable:provider:end");
+            }
+        };
+        kernelRegistry.registerModule(new RecordingModule("parked", log, Set.of(SomeService.class)));
+        kernelRegistry.registerModule(provider);
+
+        kernelRegistry.disableAll();
+
+        // The service lands in the kernel, but the drain is closed: "parked"
+        // must not activate mid-teardown (it would be cleared without
+        // onDisable). It stays parked, and parked modules never see onDisable.
+        assertIterableEquals(List.of(
+                "enable:provider",
+                "disable:provider:start", "disable:provider:end"), log);
     }
 
     @Test
@@ -523,5 +605,37 @@ class SimpleModuleRegistryTest {
 
         assertDoesNotThrow(registry::reportPendingModules);
         assertEquals(List.of(), log);
+    }
+
+    /** Marker event for the save-point contract test. */
+    private static final class SaveFinishedEvent implements Event {
+    }
+
+    @Test
+    @DisplayName("during onDisable, services and the event bus still work: the save point")
+    void onDisableIsTheSavePoint() {
+        List<String> received = new ArrayList<>();
+        kernel.getEventBus().subscribe(SaveFinishedEvent.class, (event, context) ->
+                received.add("handler"));
+        registry.registerModule(new SomeServiceProviderModule("provider", log));
+        registry.registerModule(new RecordingModule("saver", log) {
+            @Override
+            public void onDisable() {
+                SomeService service = kernel.getService(SomeService.class);
+                log.add("disable:saver:service=" + (service != null));
+                kernel.getEventBus().publish(new SaveFinishedEvent(), new EventContext("KERNEL"));
+            }
+        });
+
+        registry.disableAll();
+
+        // Reverse order: saver disables first, reads a service published by
+        // provider, notifies through the bus. This is what "save in onDisable"
+        // relies on — nothing is unregistered during teardown.
+        assertIterableEquals(List.of(
+                "enable:provider", "enable:saver",
+                "disable:saver:service=true",
+                "disable:provider"), log);
+        assertIterableEquals(List.of("handler"), received);
     }
 }

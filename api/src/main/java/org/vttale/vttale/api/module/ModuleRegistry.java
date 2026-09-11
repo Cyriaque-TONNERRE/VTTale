@@ -33,8 +33,10 @@ public interface ModuleRegistry {
 
     /**
      * Disables every enabled module by calling {@link Module#onDisable()}.
-     * Called once by the platform on server shutdown.
+     * Called once by the platform on server shutdown (or plugin unload).
      * Disables in reverse activation order - a dependent shuts down before its provider.
+     * This closes the registry for good: afterwards {@link #registerModule} is
+     * refused and nothing activates.
      */
     void disableAll();
 }
