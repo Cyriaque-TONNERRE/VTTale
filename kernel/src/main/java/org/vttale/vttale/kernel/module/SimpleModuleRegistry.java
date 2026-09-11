@@ -52,8 +52,6 @@ public class SimpleModuleRegistry implements ModuleRegistry {
         }
         String id = safeId(module);
         if (id == null) {
-            LOGGER.log(Level.ERROR, "Module " + module.getClass().getName()
-                    + " returned null from id() and was refused");
             return;
         }
         Module taken = ids.get(id);
@@ -157,8 +155,9 @@ public class SimpleModuleRegistry implements ModuleRegistry {
 
     /**
      * Boot-time report: logs every still-parked module at ERROR with the
-     * services it waits for. Called once by the platform at the end of
-     * setup(). Reports, never activates: parking is normal while plugins load,
+     * services it waits for. Called by the platform during setup(), after the
+     * built-in modules are registered. Reports, never activates: parking is
+     * normal while plugins load,
      * never-satisfied is the real problem - hence ERROR here, INFO at park
      * time. Known ceiling: modules parked after this call (third-party plugins
      * loading later) are only covered by their parking INFO line.
@@ -206,11 +205,17 @@ public class SimpleModuleRegistry implements ModuleRegistry {
 
     /**
      * The module's id, or null if {@code id()} threw (logged) or returned
-     * null. Never lets a third-party {@code id()} escape.
+     * null (logged). One accurate ERROR per refusal. Never lets a third-party
+     * {@code id()} escape.
      */
     private String safeId(Module module) {
         try {
-            return module.id();
+            String id = module.id();
+            if (id == null) {
+                LOGGER.log(Level.ERROR, "Module " + module.getClass().getName()
+                        + " returned null from id() and was refused");
+            }
+            return id;
         } catch (Throwable e) {
             LOGGER.log(Level.ERROR, "Module " + module.getClass().getName()
                     + " threw from id() and was refused", e);
