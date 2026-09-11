@@ -6,7 +6,10 @@ import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.module.ModuleRegistry;
 
 import java.lang.System.Logger.Level;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -20,22 +23,42 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     private final Kernel kernel;
     private final List<Module> modules = new CopyOnWriteArrayList<>();
 
+    // Reserved module ids -> owner. Reserved at registration, released by disableAll only.
+    private final Map<String, Module> ids = new HashMap<>();
+
+    // Parked modules, in registration order: the drain (Task 3) activates them
+    // in that order, so two parked game systems resolve deterministically.
+    private final List<Module> pending = new ArrayList<>();
+
     public SimpleModuleRegistry(Kernel kernel) {
         this.kernel = kernel;
     }
 
     @Override
     public synchronized void registerModule(Module module) {
-        if (modules.contains(module)) {
+        if (modules.contains(module) || pending.contains(module)) {
             return;
         }
+        String id = safeId(module);
+        if (id == null) {
+            LOGGER.log(Level.ERROR, "Module " + module.getClass().getName()
+                    + " returned null from id() and was refused");
+            return;
+        }
+        Module taken = ids.get(id);
+        if (taken != null) {
+            LOGGER.log(Level.ERROR, "Module id " + id + " is already taken by "
+                    + taken.getClass().getName() + "; refusing " + module.getClass().getName());
+            return;
+        }
+        ids.put(id, module);
         boolean isGameSystem = module instanceof GameSystem;
         // Exclusivity: at most one GameSystem per server. Refused BEFORE onEnable, so the
         // rejected module produces no side effect at all - nothing to roll back.
         if (isGameSystem) {
             GameSystem active = kernel.getService(GameSystem.class);
             if (active != null) {
-                LOGGER.log(Level.ERROR, "A game system is already active (" + describe(active)
+                LOGGER.log(Level.ERROR, "A game system is already active (" + idOf(active)
                         + "); refusing " + module.getClass().getName());
                 return;
             }
@@ -59,16 +82,26 @@ public class SimpleModuleRegistry implements ModuleRegistry {
         modules.add(module);
     }
 
-    /**
-     * Renders an already-active system for a log line without letting a third-party
-     * {@code id()} escape: the exclusivity guard runs outside the onEnable safety net,
-     * and this registry promises never to propagate a module failure.
-     */
-    private static String describe(GameSystem system) {
+    /** Renders a module id for a log line without letting third-party code escape. */
+    private static String idOf(Module module) {
         try {
-            return system.id();
+            return module.id();
         } catch (Throwable e) {
-            return system.getClass().getName();
+            return module.getClass().getName();
+        }
+    }
+
+    /**
+     * The module's id, or null if {@code id()} threw (logged) or returned
+     * null. Never lets a third-party {@code id()} escape.
+     */
+    private String safeId(Module module) {
+        try {
+            return module.id();
+        } catch (Throwable e) {
+            LOGGER.log(Level.ERROR, "Module " + module.getClass().getName()
+                    + " threw from id() and was refused", e);
+            return null;
         }
     }
 

@@ -24,7 +24,13 @@ import java.util.Set;
  */
 public interface GameSystem extends Module {
 
-    /** Stable ruleset identifier, e.g. {@code "dnd5e"}. Namespace it if collisions ever matter. */
+    /**
+     * Stable ruleset identifier, e.g. {@code "dnd5e"}.
+     * <p>
+     * Must be unique across all installed modules: the module registry
+     * reserves ids at registration and refuses duplicates. Namespace it
+     * ({@code "vttale:dnd5e"}).
+     */
     String id();
 
     /** Ruleset version. */

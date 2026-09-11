@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -28,6 +27,11 @@ class SimpleModuleRegistryTest {
         private final boolean failOnEnable;
         private final boolean failOnDisable;
         Kernel seenKernel;
+
+        @Override
+        public String id() {
+            return name;
+        }
 
         RecordingModule(String name, List<String> log) {
             this(name, log, false, false);
@@ -129,13 +133,50 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
-    @DisplayName("two distinct instances of the same class are both enabled")
-    void distinctInstancesAreNotDeduplicated() {
+    @DisplayName("a taken id is refused; a distinct id is not")
+    void duplicateIdIsRefused() {
         registry.registerModule(new RecordingModule("a", log));
+        registry.registerModule(new RecordingModule("a", log));
+        registry.registerModule(new RecordingModule("b", log));
+
+        assertIterableEquals(List.of("enable:a", "enable:b"), log);
+    }
+
+    @Test
+    @DisplayName("a module that failed to enable keeps its id reserved")
+    void failedModuleKeepsIdReserved() {
+        registry.registerModule(new RecordingModule("a", log, true, false));
         registry.registerModule(new RecordingModule("a", log));
 
-        // Deduplication is by identity (List#contains -> equals), not by module type.
-        assertEquals(2, log.size());
+        assertIterableEquals(List.of("enable:a"), log);
+    }
+
+    @Test
+    @DisplayName("a module whose id() throws is refused")
+    void idThrowingIsRefused() {
+        registry.registerModule(new RecordingModule("bad", log) {
+            @Override
+            public String id() {
+                throw new IllegalStateException("boom");
+            }
+        });
+        registry.registerModule(new RecordingModule("ok", log));
+
+        assertIterableEquals(List.of("enable:ok"), log);
+    }
+
+    @Test
+    @DisplayName("a module returning null from id() is refused")
+    void idNullIsRefused() {
+        registry.registerModule(new RecordingModule("bad", log) {
+            @Override
+            public String id() {
+                return null;
+            }
+        });
+        registry.registerModule(new RecordingModule("ok", log));
+
+        assertIterableEquals(List.of("enable:ok"), log);
     }
 
     @Test
