@@ -20,14 +20,18 @@ import java.util.logging.Level;
  * VTTale platform for Hytale. The only module aware of the game API.
  * <p>
  * Bootstrap order: create kernel, inject facade, register built-in modules
- * explicitly (no SPI), then disable everything cleanly on shutdown. The token
- * binder declares its TokenRegistry dependency via requires(); the registry
- * parks it until the service exists.
+ * explicitly (no SPI). The token binder declares its TokenRegistry dependency
+ * via requires(); the registry parks it until the service exists.
+ * <p>
+ * Shutdown: Hytale calls shutdown() on server stop, while the world and the
+ * event bus are still alive — that is where modules save (see Module#onDisable).
  * <p>
  * Reload is not supported: the plugin boots once per JVM (VTTale.init throws
- * on re-init, and setup() registers a shutdown hook that a second boot would pile up).
+ * on re-init, and the module registry is closed for good after shutdown()).
  */
 public class VTTaleHytalePlugin extends JavaPlugin {
+
+    private ModuleRegistry modules;
 
     public VTTaleHytalePlugin(@Nonnull JavaPluginInit init) {
         super(init);
@@ -38,7 +42,7 @@ public class VTTaleHytalePlugin extends JavaPlugin {
         Kernel kernel = new VTTaleKernel();
         VTTale.init(kernel);
 
-        ModuleRegistry modules = kernel.getModuleRegistry();
+        modules = kernel.getModuleRegistry();
         modules.registerModule(new HytaleAdapter(this));
         modules.registerModule(new ChatModule());
         modules.registerModule(new DiceRollModule());
@@ -52,8 +56,15 @@ public class VTTaleHytalePlugin extends JavaPlugin {
             registry.reportPendingModules();
         }
 
-        Runtime.getRuntime().addShutdownHook(new Thread(modules::disableAll, "vttale-shutdown"));
-
         getLogger().at(Level.INFO).log("VTTale ready");
+    }
+
+    @Override
+    protected void shutdown() {
+        if (modules == null) {
+            return; // setup() failed before booting the kernel
+        }
+        modules.disableAll();
+        getLogger().at(Level.INFO).log("VTTale shut down");
     }
 }
