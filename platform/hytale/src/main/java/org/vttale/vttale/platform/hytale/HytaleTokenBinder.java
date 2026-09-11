@@ -1,5 +1,6 @@
 package org.vttale.vttale.platform.hytale;
 
+import com.hypixel.hytale.event.EventRegistration;
 import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.event.events.player.PlayerConnectEvent;
@@ -50,6 +51,9 @@ public class HytaleTokenBinder implements Module {
 
     private final JavaPlugin plugin;
     private TokenRegistry tokenRegistry;
+    // Null until onEnable: a parked module is disabled without having been enabled.
+    private EventRegistration<Void, PlayerConnectEvent> playerConnectRegistration;
+    private EventRegistration<Void, PlayerDisconnectEvent> playerDisconnectRegistration;
 
     /**
      * Creates a new HytaleTokenBinder.
@@ -78,14 +82,23 @@ public class HytaleTokenBinder implements Module {
         eventBus.subscribe(TokenRemovedEvent.class, this::onTokenRemoved);
 
         // Listen for Hytale player events
-        plugin.getEventRegistry().register(PlayerConnectEvent.class, this::onPlayerConnect);
-        plugin.getEventRegistry().register(PlayerDisconnectEvent.class, this::onPlayerDisconnect);
+        playerConnectRegistration = plugin.getEventRegistry().register(PlayerConnectEvent.class, this::onPlayerConnect);
+        playerDisconnectRegistration = plugin.getEventRegistry().register(PlayerDisconnectEvent.class, this::onPlayerDisconnect);
 
         LOGGER.info("HytaleTokenBinder enabled");
     }
 
     @Override
     public void onDisable() {
+        // Hytale side: the event registry hands back registrations that can be
+        // undone. Kernel side: EventBus has no unsubscribe, so the VTTale
+        // subscriptions live until the JVM dies - shutdown is terminal here.
+        if (playerConnectRegistration != null) {
+            playerConnectRegistration.unregister();
+        }
+        if (playerDisconnectRegistration != null) {
+            playerDisconnectRegistration.unregister();
+        }
         LOGGER.info("HytaleTokenBinder disabled");
     }
 
