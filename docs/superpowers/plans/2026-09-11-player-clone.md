@@ -68,9 +68,7 @@ import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -278,13 +276,11 @@ class PlayerCloneModuleTest {
     @DisplayName("other commands are ignored")
     void ignoresOtherCommands() {
         run("roll", PLAYER, "2d6");
-        assertFalse(out.isEmpty() || clones.spawnCalls.size() > 0 && out.size() > 1);
-        assertTrue(clones.spawnCalls.isEmpty());
+        assertEquals(0, out.size(), "no reply for a command this module does not own");
+        assertTrue(clones.spawnCalls.isEmpty(), "no spawn for a command this module does not own");
     }
 }
 ```
-
-Note on the last test: `/roll` is not registered here (no DiceRollModule), so nothing replies and no clone spawns — the assertion is simply that the clone service was never touched.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
