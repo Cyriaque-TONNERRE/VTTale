@@ -31,7 +31,10 @@ import java.util.logging.Level;
  */
 public class VTTaleHytalePlugin extends JavaPlugin {
 
-    private ModuleRegistry modules;
+    // volatile: setup() and shutdown() may run on different threads. PluginManager
+    // does hold its write lock across both today, but not depending on that is one
+    // keyword.
+    private volatile ModuleRegistry modules;
 
     public VTTaleHytalePlugin(@Nonnull JavaPluginInit init) {
         super(init);
