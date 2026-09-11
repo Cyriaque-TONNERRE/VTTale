@@ -132,9 +132,11 @@ la vraie solution — prévue pour plus tard, pas dans ce correctif.
    `registerModule(autre)` depuis son `onDisable` → `autre` ne voit jamais
    `onEnable`. Même chose pour un module parké réveillé par un
    `registerService` fait dans un `onDisable`.
-4. `VTTaleKernelTest` — point de save : pendant `onDisable`, un module lit un
-   service via `getService` et publie sur le bus, et un handler abonné le
-   reçoit. C'est ce test qui garantit le contrat « onDisable = save ».
+4. `SimpleModuleRegistryTest` — point de save : pendant `onDisable`, un module
+   lit un service via `getService` et publie sur le bus, et un handler abonné
+   le reçoit. C'est ce test qui garantit le contrat « onDisable = save ».
+   (Même fichier que les autres : le contrat testé est celui de
+   `disableAll()`, et le scaffolding `RecordingModule` y vit déjà.)
 
 `platform/hytale` n'est pas testé unitairement (règle projet) ; validation
 en jeu : stop serveur → « VTTale shut down » apparaît dans les logs **avant**
