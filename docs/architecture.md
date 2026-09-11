@@ -4,9 +4,12 @@ VTTale est un **framework** : le noyau fournit les briques (bus, tokens,
 behaviors, commandes, services), le gameplay s'écrit en modules sans jamais
 modifier le noyau.
 
-> **Source de vérité** : [`docs/superpowers/specs/2026-09-09-framework-design.md`](superpowers/specs/2026-09-09-framework-design.md).
+> **Sources de vérité** : les specs datées de
+> [`docs/superpowers/specs/`](superpowers/specs/) — design du framework
+> (2026-09-09), contrat GameSystem (2026-09-10), dépendances de modules et
+> activation différée (2026-09-11).
 > Ce document est un résumé pour les auteurs de modules ; en cas de divergence,
-> la spec prime.
+> les specs priment.
 
 ## Vue d'ensemble
 

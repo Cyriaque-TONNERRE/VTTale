@@ -6,7 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Discussions in **French**; code, comments, commit messages and Javadoc in **English**.
 - Commit messages: conventional style, plain, **no `Co-Authored-By` trailer**.
-- Feature work on a branch, `--no-ff` merge to `main`, push, then delete the branch (local + remote).
+- Feature work on a branch — **never push directly to `main`**. Push the branch, open a PR to `main`, merge via GitHub once reviewed; delete the branch after merge (local + remote).
+- Before pushing or merging: tests + `./gradlew build` green (see Tests) — verified, not assumed.
 
 ## Project
 
@@ -14,7 +15,7 @@ VTTale turns a Hytale server into a tabletop RPG platform. It is a **framework**
 
 - Language: Java 25. Build: Gradle (wrapper 9.7.1, Kotlin DSL). `platform:hytale` uses `com.azuredoom.hytale-tools` (pinned) to resolve the Hytale Server dependency and generate `manifest.json`; `com.gradleup.shadow` bundles the single deployable fat JAR.
 - Origin: fork of https://github.com/VTTaleTeam/VTTale (branch `poc/VTT-38-Token-Registry`). README credits the original contributors — keep them.
-- Project documentation (French): `docs/architecture.md` (framework + module-author guide) and `docs/superpowers/specs/2026-09-09-framework-design.md` (design spec, source of truth). Update `docs/architecture.md` when changing architecture or commands.
+- Project documentation (French): `docs/architecture.md` (framework + module-author guide) and `docs/superpowers/specs/` (dated design specs — one per feature, source of truth for its area). Update `docs/architecture.md` when changing architecture or commands.
 - Old local references: Hytale decompiled sources (no assets) at `C:\Users\Siryak\Documents\HytaleSource\{HytaleServer,HytaleClient,Protocol}`; previous prototype repo at `C:\Users\Siryak\Documents\TTTALE` (read-only reference, never commit there).
 
 ## Architecture

@@ -52,7 +52,13 @@ Le JAR déployable est `platform/hytale/build/libs/VTTale-<version>-all.jar`.
 1. Projet Java avec `org.vttale:vttale` (ou les sources de `api/`) en
    `compileOnly`.
 2. Écrire `class MonModule implements Module` (composants, behaviors,
-   événements — Java pur, testable hors Hytale).
+   événements — Java pur, testable hors Hytale). Deux déclarations
+   optionnelles :
+   - **`id()`** — identifiant unique (`"monplugin:monmodule"`), défaut : nom de
+     classe pleinement qualifié ; un doublon est refusé ;
+   - **`requires()`** — services nécessaires (`Set.of(DiceService.class)`) :
+     le module est mis en parc et activé dès qu'ils apparaissent, l'ordre
+     d'enregistrement n'a plus d'importance.
 3. Publier un plugin Hytale dont le `manifest.json` déclare
    `"Dependencies": { "VTTALE:vttale": "*" }` et dont le `Main` (classe
    étendant `JavaPlugin`) fait dans `setup()` :
@@ -63,3 +69,14 @@ VTTale.getKernel().getModuleRegistry().registerModule(new MonModule());
 
 Les classloaders Hytale étant isolés par JAR, l'auto-enregistrement est le seul
 mécanisme de découverte inter-plugin.
+
+## Contribuer
+
+- Discussions en français ; code, commentaires, commits et Javadoc en anglais
+  (commits au format conventional, sans trailer).
+- Jamais directement sur `main` : branche de feature → push → **Pull Request**
+  vers `main` → merge après relecture, branche supprimée.
+- La suite doit rester verte : `./gradlew :api:test :kernel:test :module:test
+  :gamesystem:test` puis `./gradlew build`.
+- Changement d'architecture : une spec datée d'abord dans
+  `docs/superpowers/specs/`, puis le code, puis `docs/architecture.md`.
