@@ -91,11 +91,12 @@ synchronized registerModule(module):
 synchronized tryEnable(module):
     // garde GameSystem inchangée (refus avant tout effet de bord)
     activating++;                            // <-- LA GARDE COUVRE onEnable, PAS LE DRAIN
-    try { module.onEnable(kernel); }
-    catch (Throwable e) { ERROR; return; }   // id conservé : cf. cycle de vie d'un id
+    enabled = false
+    try { module.onEnable(kernel); enabled = true; }
+    catch (Throwable e) { ERROR; }           // id conservé : cf. cycle de vie d'un id
     finally { activating--; }
-    modules.add(module);
-    drainPending();
+    if enabled: modules.add(module)
+    drainPending()                           // TOUJOURS - voir « Un onEnable en échec draine quand même »
 
 synchronized drainPending():
     if activating > 0 or draining:           // une activation ou un drain est en cours :
@@ -135,6 +136,8 @@ Le dépendant démarrerait dans un monde où `TokenRegistry` existe mais pas `Be
 **Le drapeau doit couvrir `onEnable`, pas la boucle de drain.** C'est la subtilité de tout le design. Un drapeau posé à l'entrée de `drainPending` ne suffirait pas : dans la chaîne ci-dessus, `tryEnable` appelle `onEnable` **avant** d'appeler `drainPending`, donc au moment de la réentrance aucun drain n'est en cours et un tel drapeau serait à `false` — le drain imbriqué passerait, et le trou serait exactement celui qu'on croit avoir bouché. D'où `activating`, incrémenté autour de `onEnable` lui-même, et un compteur plutôt qu'un booléen puisqu'un `onEnable` peut enregistrer un autre module.
 
 La condition est « aucune activation ni aucun drain en cours → drainer maintenant », pas seulement « reporter au drain externe » : un service peut naître **hors** de tout `onEnable` (le `setup()` plateforme, ou un plugin tiers qui fait `kernel.registerService` sans module). Dans ce cas personne d'autre ne drainerait, et le parqué dormirait jusqu'au prochain `registerModule`.
+
+**Un `onEnable` en échec draine quand même.** Le `catch` ne sort plus avant le drain : un `onEnable` qui enregistre un service puis jette laisse ce service dans le kernel (pas de rollback), et ce service doit réveiller ses dépendants comme n'importe quel autre. Sans lui, le `dirty` couché par le `registerService` imbriqué n'a plus de lecteur : le parqué concerné dort jusqu'à un enregistrement sans rapport — un réveil non déterministe, très pénible à diagnostiquer. Le drain ne réhabilite pas le module en échec : pas de `modules.add`, donc jamais de `onDisable` pour lui.
 
 ### Détails d'implémentation qui mordent
 
@@ -196,6 +199,7 @@ Aucun built-in ne déclare `requires()` : aucun n'a de dépendance de service r�
 
   Avec la garde mal placée on obtient `["P:start", "C", "P:end"]`. Un consommateur qui requerrait `{S1, S2}` passerait dans les deux cas et ne prouverait rien.
 - **Réserve d'id** : un module dont l'`onEnable` échoue garde son id — un second module portant le même id est refusé.
+- **Échec après enregistrement** : un `onEnable` qui pose un service puis jette réveille quand même ses dépendants (le service reste posé) ; le module en échec reste absent de la liste et jamais `onDisable`.
 - **`requires()` qui jette** → module refusé, rien d'autre n'explose. Idem `id()` qui jette, `requires()` qui renvoie `null`, et `requires()` contenant `null`.
 - **Déterminisme GameSystem** : deux GameSystems parqués sur le même service → premier enregistré gagne, second refusé par la garde, jamais activé.
 - Les tests GameSystem existants restent valides tels quels.
