@@ -37,6 +37,9 @@ VTTale/
 - **Event bus**: synchronous, typed, priority-ordered (lower first, ties = subscription order). `publish` returns only after every handler returned. Handler/module failures are caught (`Throwable` at plugin boundaries), logged, and contained — one broken module never kills the server.
 - **Tokens**: identity + Components (data) + tags (filters) + Behaviors (logic, private `BehaviorContext`, dispatched via `BehaviorDispatcher`). Lifecycle events are exactly `TokenCreatedEvent`, `TokenRemovedEvent`, `TokenUpdatedEvent`, `TokenBoundEvent` — every mutation flows through `TokenUpdatedEvent`; there are no Moved/Selected/Placed events.
 - Reload is not supported: the plugin boots once per JVM (`VTTale.init` throws on re-init).
+- Shutdown: Hytale calls `PluginBase.shutdown()` (world and bus still alive)
+  → `ModuleRegistry.disableAll()`; `onDisable` is the save point. The registry
+  is closed after `disableAll()` — no registration afterwards.
 
 ## Tests
 

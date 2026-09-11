@@ -80,6 +80,23 @@ Hytale classloaders are isolated per JAR: no cross-JAR discovery mechanism
 exists. Self-registration from `setup()` is therefore the only path for a
 third-party module.
 
+**Shutdown**: Hytale calls the plugin's `shutdown()` on server stop, while
+the world, the Hytale event bus and the registries are still alive. The
+platform answers with `ModuleRegistry.disableAll()`: every module sees
+`onDisable()` once, in reverse activation order (dependents before
+providers), then the registry is closed for good — `registerModule` after
+that is refused. `onDisable` is the **save point**: services stay registered
+and the kernel bus still works there. Keep saves fast and synchronous (a
+save that blocks hangs the server stop); do not queue world work
+(`world.execute(...)` — a task queued during shutdown may never run) and do
+not register modules or services there.
+
+Third-party ordering: Hytale stops plugins in reverse dependency order, so
+your plugin's own `shutdown()` and `cleanup()` run **before** VTTale's.
+Saving kernel state from your module's `onDisable` is fine; touching your
+own Hytale registrations there is too late — undo those in your plugin's
+`shutdown()`.
+
 ## Game systems
 
 A game system (D&D 5e, Pathfinder 2e, …) is a `GameSystem`: a `Module` that
