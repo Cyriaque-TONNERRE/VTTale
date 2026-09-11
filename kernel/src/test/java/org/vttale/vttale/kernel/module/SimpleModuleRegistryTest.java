@@ -382,6 +382,20 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
+    @DisplayName("a service registered outside any module wakes parked modules")
+    void directServiceRegistrationWakesParkedModule() {
+        // Use the kernel's own registry: it is the one its registerService notifies.
+        SimpleModuleRegistry kernelRegistry = (SimpleModuleRegistry) kernel.getModuleRegistry();
+        kernelRegistry.registerModule(new RecordingModule("consumer", log, Set.of(SomeService.class)));
+        assertEquals(List.of(), log);
+
+        kernel.registerService(SomeService.class, new SomeService() {
+        });
+
+        assertIterableEquals(List.of("enable:consumer"), log);
+    }
+
+    @Test
     @DisplayName("two parked game systems: first registered wins, deterministically")
     void twoParkedGameSystemsFirstRegisteredWins() {
         StubGameSystem gs1 = new StubGameSystem("gs1", log) {

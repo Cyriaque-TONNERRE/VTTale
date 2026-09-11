@@ -146,6 +146,16 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     }
 
     /**
+     * Called by the kernel after a service registration: a parked module may
+     * now resolve. Drains immediately when no activation or drain is in
+     * progress; otherwise just marks the queue dirty for the outermost drain.
+     * Kernel-internal on purpose: not part of the ModuleRegistry contract.
+     */
+    public void onServiceRegistered() {
+        drainPending();
+    }
+
+    /**
      * The required services not yet registered, or null if {@code requires()}
      * threw, returned null or contained null - the module is unreadable either
      * way and the caller refuses it. Never lets third-party code escape.

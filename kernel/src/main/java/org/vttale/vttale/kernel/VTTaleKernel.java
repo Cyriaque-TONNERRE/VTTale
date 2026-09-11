@@ -15,7 +15,9 @@ public class VTTaleKernel implements Kernel {
 
     private final EventBus eventBus;
     private final CommandRegistry commandRegistry;
-    private final ModuleRegistry moduleRegistry;
+    // Concrete type: registerService must reach onServiceRegistered(), which is
+    // kernel-internal and deliberately absent from the ModuleRegistry interface.
+    private final SimpleModuleRegistry moduleRegistry;
     private final Map<Class<?>, Object> services = new ConcurrentHashMap<>();
 
     /**
@@ -50,5 +52,7 @@ public class VTTaleKernel implements Kernel {
     @Override
     public <T> void registerService(Class<T> serviceClass, T service) {
         services.put(serviceClass, service);
+        // A parked module may have been waiting for exactly this service.
+        moduleRegistry.onServiceRegistered();
     }
 }
