@@ -1,12 +1,8 @@
 package org.vttale.vttale.platform.hytale;
 
-import com.hypixel.hytale.event.EventRegistration;
 import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.entity.entities.Player;
-import com.hypixel.hytale.server.core.event.events.player.PlayerConnectEvent;
-import com.hypixel.hytale.server.core.event.events.player.PlayerDisconnectEvent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
-import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
 import org.joml.Vector3d;
@@ -15,7 +11,6 @@ import org.vttale.vttale.api.Kernel;
 import org.vttale.vttale.api.events.EventBus;
 import org.vttale.vttale.api.events.EventContext;
 import org.vttale.vttale.api.module.Module;
-import org.vttale.vttale.api.token.CoreTokenType;
 import org.vttale.vttale.api.token.Token;
 import org.vttale.vttale.api.token.TokenPosition;
 import org.vttale.vttale.api.token.TokenRegistry;
@@ -24,11 +19,9 @@ import org.vttale.vttale.api.token.events.TokenRemovedEvent;
 import org.vttale.vttale.api.token.events.TokenUpdatedEvent;
 
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -40,7 +33,6 @@ import java.util.logging.Logger;
  * Responsibilities:<br />
  * - Creating Hytale entities when tokens are spawned<br />
  * - Synchronizing token data to entities (position, name, etc.)<br />
- * - Listening to Hytale events and updating tokens<br />
  * - Managing the token-entity binding lifecycle
  * <p>
  * Thread Safety:
@@ -53,15 +45,10 @@ public class HytaleTokenBinder implements Module {
 
     private final JavaPlugin plugin;
     private TokenRegistry tokenRegistry;
-    // Set in onDisable before anything else: the single kill switch for all
-    // five handlers. Kernel subscriptions cannot be removed at all; Hytale
-    // ones are unregistered too, but the flag closes the race window between
-    // onDisable and unregister. Volatile: events arrive from world threads,
-    // onDisable runs on another.
+    // Set in onDisable before anything else: the kill switch for the three
+    // token-event handlers. Kernel subscriptions cannot be removed at all.
+    // Volatile: events arrive from world threads, onDisable runs on another.
     private volatile boolean disabled;
-    // Null until onEnable: a parked module is disabled without having been enabled.
-    private EventRegistration<Void, PlayerConnectEvent> playerConnectRegistration;
-    private EventRegistration<Void, PlayerDisconnectEvent> playerDisconnectRegistration;
 
     /**
      * Creates a new HytaleTokenBinder.
@@ -89,37 +76,13 @@ public class HytaleTokenBinder implements Module {
         eventBus.subscribe(TokenUpdatedEvent.class, this::onTokenUpdated);
         eventBus.subscribe(TokenRemovedEvent.class, this::onTokenRemoved);
 
-        // Listen for Hytale player events
-        playerConnectRegistration = plugin.getEventRegistry().register(PlayerConnectEvent.class, this::onPlayerConnect);
-        playerDisconnectRegistration = plugin.getEventRegistry().register(PlayerDisconnectEvent.class, this::onPlayerDisconnect);
-
         LOGGER.info("HytaleTokenBinder enabled");
     }
 
     @Override
     public void onDisable() {
         disabled = true;
-        unregisterQuietly(playerConnectRegistration);
-        unregisterQuietly(playerDisconnectRegistration);
-        playerConnectRegistration = null;
-        playerDisconnectRegistration = null;
         LOGGER.info("HytaleTokenBinder disabled");
-    }
-
-    /**
-     * Unregisters one Hytale event listener. One failure must not prevent the
-     * next unregister, and a null registration (parked module never enabled,
-     * or already disabled) is a no-op - double disable stays safe.
-     */
-    private static void unregisterQuietly(EventRegistration<Void, ?> registration) {
-        if (registration == null) {
-            return;
-        }
-        try {
-            registration.unregister();
-        } catch (RuntimeException e) {
-            LOGGER.log(Level.WARNING, "Failed to unregister " + registration.getEventClass().getSimpleName(), e);
-        }
     }
 
     // ==================== VTTale Token Events ====================
@@ -182,69 +145,6 @@ public class HytaleTokenBinder implements Module {
         // a player or have other purposes. Let the caller handle despawning.
         event.getBoundEntityId().ifPresent(entityId -> {
             LOGGER.fine("Token " + event.getTokenName() + " removed, was bound to entity " + entityId);
-        });
-    }
-
-    // ==================== Hytale Player Events ====================
-
-    /**
-     * Handles player connection - creates a token for the player.
-     */
-    private void onPlayerConnect(PlayerConnectEvent event) {
-        if (disabled) {
-            return;
-        }
-        PlayerRef playerRef = event.getPlayerRef();
-        World world = event.getWorld();
-
-        // Check if a token already exists for this player
-        Optional<Token> existingToken = tokenRegistry.getByEntityId(playerRef.getUuid());
-        if (existingToken.isPresent()) {
-            LOGGER.fine("Player " + playerRef.getUsername() + " already has a token");
-            return;
-        }
-
-        // Create a new token for the player
-        Token playerToken = createTokenForPlayer(playerRef.getUuid(), playerRef.getUsername());
-
-        // Set the world
-        playerToken.setWorldId(world.getWorldConfig().getUuid());
-
-        // Bind to the player entity
-        tokenRegistry.bindToEntity(playerToken.getId(), playerRef.getUuid());
-
-        // Update position from player
-        world.execute(() -> {
-            var transform = playerRef.getTransform();
-            // Updates token position from player transform
-            if (transform != null) {
-                TokenPosition pos = new TokenPosition(
-                        transform.getPosition().x(),
-                        transform.getPosition().y(),
-                        transform.getPosition().z(),
-                        transform.getRotation().yaw(), // yaw
-                        transform.getRotation().pitch()  // pitch
-                );
-                playerToken.setPosition(pos);
-            }
-        });
-
-        LOGGER.info("Created token for player: " + playerRef.getUsername());
-    }
-
-    /**
-     * Handles player disconnection.
-     */
-    private void onPlayerDisconnect(PlayerDisconnectEvent event) {
-        if (disabled) {
-            return;
-        }
-        PlayerRef playerRef = event.getPlayerRef();
-
-        // Find and unbind the player's token (but don't remove it)
-        tokenRegistry.getByEntityId(playerRef.getUuid()).ifPresent(token -> {
-            tokenRegistry.unbindFromEntity(token.getId());
-            LOGGER.fine("Unbound token for disconnected player: " + playerRef.getUsername());
         });
     }
 
@@ -312,20 +212,6 @@ public class HytaleTokenBinder implements Module {
     }
 
     // ==================== Public API ====================
-
-    /**
-     * Creates a token for a player.
-     *
-     * @param playerId   the player's UUID
-     * @param playerName the player's name
-     * @return the created token
-     */
-    public Token createTokenForPlayer(UUID playerId, String playerName) {
-        Objects.requireNonNull(tokenRegistry, "binder not enabled");
-        Token token = tokenRegistry.create(playerName, CoreTokenType.PLAYER_CHARACTER, playerId);
-        LOGGER.info("Created token for player: " + playerName);
-        return token;
-    }
 
     /**
      * Spawns a Hytale entity for a token.
