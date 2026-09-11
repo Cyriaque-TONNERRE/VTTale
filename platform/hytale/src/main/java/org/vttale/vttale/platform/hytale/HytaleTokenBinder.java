@@ -53,9 +53,11 @@ public class HytaleTokenBinder implements Module {
 
     private final JavaPlugin plugin;
     private TokenRegistry tokenRegistry;
-    // Set in onDisable before anything else: kernel subscriptions cannot be
-    // removed, so the handlers gate on this flag instead. Volatile: token
-    // events arrive from world threads, onDisable runs on another.
+    // Set in onDisable before anything else: the single kill switch for all
+    // five handlers. Kernel subscriptions cannot be removed at all; Hytale
+    // ones are unregistered too, but the flag closes the race window between
+    // onDisable and unregister. Volatile: events arrive from world threads,
+    // onDisable runs on another.
     private volatile boolean disabled;
     // Null until onEnable: a parked module is disabled without having been enabled.
     private EventRegistration<Void, PlayerConnectEvent> playerConnectRegistration;
@@ -189,6 +191,9 @@ public class HytaleTokenBinder implements Module {
      * Handles player connection - creates a token for the player.
      */
     private void onPlayerConnect(PlayerConnectEvent event) {
+        if (disabled) {
+            return;
+        }
         PlayerRef playerRef = event.getPlayerRef();
         World world = event.getWorld();
 
@@ -231,6 +236,9 @@ public class HytaleTokenBinder implements Module {
      * Handles player disconnection.
      */
     private void onPlayerDisconnect(PlayerDisconnectEvent event) {
+        if (disabled) {
+            return;
+        }
         PlayerRef playerRef = event.getPlayerRef();
 
         // Find and unbind the player's token (but don't remove it)
@@ -376,6 +384,7 @@ public class HytaleTokenBinder implements Module {
      * @return true if the entity was despawned
      */
     public boolean despawnEntityForToken(Token token) {
+        Objects.requireNonNull(tokenRegistry, "binder not enabled");
         UUID entityId = token.getBoundEntityId().orElse(null);
         if (entityId == null) {
             return false;
