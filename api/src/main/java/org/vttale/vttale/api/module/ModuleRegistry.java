@@ -3,9 +3,19 @@ package org.vttale.vttale.api.module;
 /**
  * Registry for managing module lifecycle.
  * <p>
- * Modules registered here have their {@link Module#onEnable} called
- * immediately. A module whose {@code onEnable} throws is skipped and logged —
- * one broken module never prevents the server from starting.
+ * A module is enabled immediately when every service returned by
+ * {@link Module#requires()} is registered; otherwise it is parked and
+ * activated when they appear. Registration order therefore does not matter
+ * for service dependencies - only for event-driven bridging, which the
+ * platform owns.
+ * <p>
+ * Each module id ({@link Module#id()}) is reserved at registration and
+ * released only by {@link #disableAll()}: a module whose id is already taken
+ * (enabled, parked, refused, or failed to enable) is refused.
+ * <p>
+ * A module that is refused, parked, or skipped after a failed
+ * {@link Module#onEnable} never receives {@link Module#onDisable()}: cleaning
+ * up anything it registered before throwing is its own responsibility.
  */
 public interface ModuleRegistry {
 
@@ -24,6 +34,7 @@ public interface ModuleRegistry {
     /**
      * Disables every enabled module by calling {@link Module#onDisable()}.
      * Called once by the platform on server shutdown.
+     * Disables in reverse activation order - a dependent shuts down before its provider.
      */
     void disableAll();
 }
