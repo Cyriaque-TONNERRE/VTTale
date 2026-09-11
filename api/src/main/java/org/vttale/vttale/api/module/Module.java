@@ -2,6 +2,8 @@ package org.vttale.vttale.api.module;
 
 import org.vttale.vttale.api.Kernel;
 
+import java.util.Set;
+
 /**
  * Represents a VTTale module that can be loaded and managed by the kernel.
  * <p>
@@ -20,6 +22,35 @@ import org.vttale.vttale.api.Kernel;
  * </p>
  */
 public interface Module {
+
+    /**
+     * Stable identifier, unique across all installed modules: the registry
+     * refuses a module whose id is already taken (enabled or pending), and the
+     * id stays reserved even if the module is later refused or fails to
+     * enable. Default: fully qualified class name - unique across packages.
+     * Override with a namespaced id ({@code "vttale:chat"}) for readable logs.
+     * A module class is therefore a singleton per server: two instances of the
+     * same class collide on the same default id.
+     */
+    default String id() {
+        return getClass().getName();
+    }
+
+    /**
+     * Services that must be registered before this module can enable, read
+     * with {@code kernel.getService(...)} inside {@link #onEnable}. Empty by
+     * default. Registration order stops mattering for these: the registry
+     * parks the module until every entry resolves.
+     * <p>
+     * Event coupling is NOT a dependency: subscriptions happen at enable time
+     * and publications at runtime, so two modules that talk through events do
+     * not constrain each other's order. Declaring one here creates a false
+     * constraint, and two modules listening to each other create a deadlock
+     * this registry cannot resolve.
+     */
+    default Set<Class<?>> requires() {
+        return Set.of();
+    }
 
     /**
      * Called when the module is enabled.
