@@ -240,4 +240,25 @@ class PlayerCloneModuleTest {
         assertEquals(0, out.size(), "no reply for a command this module does not own");
         assertTrue(clones.spawnCalls.isEmpty(), "no spawn for a command this module does not own");
     }
+
+    @Test
+    @DisplayName("/unclone removes the clone token")
+    void uncloneRemovesToken() {
+        run("clone", PLAYER);
+        out.clear();
+
+        run("unclone", PLAYER, "Bob");
+
+        assertEquals("[VTT] Removed Bob's clone.", lastMessage());
+        assertTrue(tokens().getByOwner(PLAYER_ID).stream()
+                .noneMatch(t -> t.getTags().contains(PlayerCloneModule.CLONE_TAG)));
+    }
+
+    @Test
+    @DisplayName("/unclone without an existing clone says so")
+    void uncloneWithoutClone() {
+        run("unclone", PLAYER);
+
+        assertEquals("[VTT] Bob has no clone.", lastMessage());
+    }
 }
