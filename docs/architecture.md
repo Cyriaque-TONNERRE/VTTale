@@ -80,8 +80,9 @@ Hytale classloaders are isolated per JAR: no cross-JAR discovery mechanism
 exists. Self-registration from `setup()` is therefore the only path for a
 third-party module.
 
-**Shutdown**: Hytale calls the plugin's `shutdown()` on server stop, while
-the world, the Hytale event bus and the registries are still alive. The
+**Shutdown**: Hytale calls the plugin's `shutdown()` on server stop — or when
+the plugin itself is unloaded — while the world, the Hytale event bus and the
+registries are still alive. The
 platform answers with `ModuleRegistry.disableAll()`: every module sees
 `onDisable()` once, in reverse activation order (dependents before
 providers), then the registry is closed for good — `registerModule` after
