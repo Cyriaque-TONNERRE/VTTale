@@ -42,15 +42,33 @@ consomment avec `getService(...)`.
 
 ## Modules : cycle de vie et enregistrement
 
-`Module` est l'unique point d'extension : `onEnable(Kernel)` / `onDisable()`.
-Dans `onEnable`, un module enregistre ses commandes, souscrit au bus, pose ses
-services ; `onDisable` nettoie.
+`Module` est l'unique point d'extension : `onEnable(Kernel)` / `onDisable()`,
+plus deux déclarations optionnelles :
+
+- **`id()`** — identifiant stable, unique parmi tous les modules installés ;
+  le registre refuse un doublon. Default : nom de classe pleinement qualifié.
+  Overridez avec un id namespacé (`"vttale:chat"`) pour des logs lisibles.
+  Une classe de module est un singleton par serveur : deux instances de la
+  même classe partagent le même id par défaut, la seconde est refusée.
+- **`requires()`** — services qui doivent exister avant l'activation, lus via
+  `getService` dans `onEnable` (ex. `Set.of(DiceService.class)`). Vide par
+  défaut.
+
+**L'ordre d'enregistrement n'a plus d'importance pour ces dépendances** : un
+module dont les services requis manquent est mis en parc et s'active au
+moment où ils apparaissent. En fin de démarrage, la plateforme logge en
+ERROR les modules encore en attente avec les services manquants — un module
+qui ne s'active jamais a un service requis jamais arrivé.
+
+Le couplage par événements n'est **pas** une dépendance : abonnement à
+l'activation, publication à l'exécution, aucun ordre contraint. Ne déclarez
+jamais un événement en `requires()`.
 
 Deux modes d'enregistrement :
 
 | Mode | Qui | Comment |
 |---|---|---|
-| **Embarqué** | le platform | `registerModule(new ChatModule())`, … — liste lisible, ordre contrôlé |
+| **Embarqué** | le platform | `registerModule(new ChatModule())`, … — liste lisible ; seul `HytaleAdapter` doit rester premier (pont de commandes, invisible à `requires()`) |
 | **Tiers** | le plugin Hytale du module | dans son `setup()` : `VTTale.getKernel().getModuleRegistry().registerModule(new MonModule())` |
 
 Les classloaders Hytale sont isolés par JAR : aucun mécanisme de découverte
@@ -140,6 +158,9 @@ Flux type :
   (jamais `printStackTrace`), les handlers suivants s'exécutent quand même.
 - **`Module.onEnable` qui jette** : le module est ignoré, log d'erreur, le
   serveur démarre. Un module cassé ne tue jamais le serveur.
+- **`requires()` jamais satisfaites** : le module reste parqué (log INFO à la
+  mise en parc) ; rapport ERROR en fin de démarrage listant les services
+  manquants. Un module parqué ne voit jamais `onEnable` ni `onDisable`.
 - **Second `GameSystem` refusé** : refusé avant tout effet de bord (pas
   d'`onEnable` du tout), log d'erreur, le premier système reste actif.
 
