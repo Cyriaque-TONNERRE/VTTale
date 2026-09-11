@@ -382,6 +382,31 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
+    @DisplayName("a failed onEnable that registered a service still wakes its dependents")
+    void failedOnEnableStillWakesParkedDependents() {
+        registry.registerModule(new RecordingModule("c", log, Set.of(SomeService.class)));
+
+        Module p = new RecordingModule("p", log) {
+            @Override
+            public void onEnable(Kernel kernel) {
+                log.add("P:start");
+                kernel.registerService(SomeService.class, new SomeService() {
+                });
+                throw new IllegalStateException("boom after registering");
+            }
+        };
+        registry.registerModule(p);
+
+        // The service registered before the throw stays in the kernel (no
+        // rollback), so it wakes its dependents like any other service.
+        assertIterableEquals(List.of("P:start", "enable:c"), log);
+
+        // P never enabled: absent from the module list, never disabled.
+        registry.disableAll();
+        assertIterableEquals(List.of("P:start", "enable:c", "disable:c"), log);
+    }
+
+    @Test
     @DisplayName("a module registered from inside another onEnable does not trigger a mid-enable drain")
     void nestedRegistrationDoesNotDrainDuringOnEnable() {
         // P is parked on SomeService. M's onEnable registers N, which publishes

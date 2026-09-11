@@ -56,8 +56,16 @@ public class SimpleModuleRegistry implements ModuleRegistry {
         }
         Module taken = ids.get(id);
         if (taken != null) {
-            LOGGER.log(Level.ERROR, "Module id " + id + " is already taken by "
-                    + taken.getClass().getName() + "; refusing " + module.getClass().getName());
+            if (taken == module) {
+                // Same instance again: it failed to enable or was refused, so it is
+                // in neither list - this branch is the only trace of it.
+                LOGGER.log(Level.ERROR, "Module " + id
+                        + " is already registered but inactive (failed to enable or was refused);"
+                        + " re-registration refused");
+            } else {
+                LOGGER.log(Level.ERROR, "Module id " + id + " is already taken by "
+                        + taken.getClass().getName() + "; refusing " + module.getClass().getName());
+            }
             return;
         }
         ids.put(id, module);
@@ -90,25 +98,33 @@ public class SimpleModuleRegistry implements ModuleRegistry {
             }
         }
         activating++;
+        boolean enabled = false;
         try {
             module.onEnable(kernel);
+            enabled = true;
         } catch (Throwable e) {
             LOGGER.log(Level.ERROR, "Module " + module.getClass().getName()
                     + " failed to enable and was skipped", e);
-            return;
         } finally {
             activating--;
         }
-        // The guard above only sees a system that published itself under GameSystem.class
-        // (see GameSystem's javadoc). One that skipped it is left running on purpose -
-        // refusing here would recreate the half-initialised module the guard exists to
-        // prevent - but exclusivity no longer holds for it, so say so loudly.
-        if (isGameSystem && kernel.getService(GameSystem.class) == null) {
-            LOGGER.log(Level.ERROR, "Game system " + module.getClass().getName()
-                    + " did not publish itself under GameSystem.class in onEnable;"
-                    + " the exclusivity guard cannot see it");
+        if (enabled) {
+            // The guard above only sees a system that published itself under GameSystem.class
+            // (see GameSystem's javadoc). One that skipped it is left running on purpose -
+            // refusing here would recreate the half-initialised module the guard exists to
+            // prevent - but exclusivity no longer holds for it, so say so loudly.
+            if (isGameSystem && kernel.getService(GameSystem.class) == null) {
+                LOGGER.log(Level.ERROR, "Game system " + module.getClass().getName()
+                        + " did not publish itself under GameSystem.class in onEnable;"
+                        + " the exclusivity guard cannot see it");
+            }
+            modules.add(module);
         }
-        modules.add(module);
+        // Drained even when onEnable threw: it may have registered services before
+        // failing, and those stay in the kernel (no rollback), so they must wake
+        // their dependents like any other service. The nested drain that their
+        // registration triggered was deferred by the activating guard; without this,
+        // dirty stays set with nobody left to act on it.
         drainPending();
     }
 
@@ -118,6 +134,9 @@ public class SimpleModuleRegistry implements ModuleRegistry {
      * another drain is in progress: re-entrant calls only set {@code dirty}
      * and the outermost drain repeats. See the design spec,
      * "Pourquoi la garde anti-réentrance".
+     * <p>
+     * Each pass re-reads {@code requires()} (third-party code) for every parked
+     * module. Invisible at boot scale; revisit if the parked set ever grows.
      */
     private synchronized void drainPending() {
         if (activating > 0 || draining) {
