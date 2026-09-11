@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - Discussions in **French**; code, comments, commit messages and Javadoc in **English**.
 - Commit messages: conventional style, plain, **no `Co-Authored-By` trailer**.
-- Feature work on a branch — **never push directly to `main`**. Push the branch, open a PR to `main`, merge via GitHub once reviewed; delete the branch after merge (local + remote).
+- Feature work on a branch — never push technical work directly to `main`. Push the branch, open a PR to `main`, merge via GitHub once reviewed; delete the branch after merge (local + remote). Small non-technical changes (docs, typos) may commit directly to `main`.
 - Before pushing or merging: tests + `./gradlew build` green (see Tests) — verified, not assumed.
 
 ## Project

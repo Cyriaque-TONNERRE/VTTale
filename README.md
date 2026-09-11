@@ -1,34 +1,36 @@
 # VTTale
 
-VTTale transforme un serveur Hytale en table de jeu de rôle (VTT). C'est un
-**framework** : le noyau fournit les briques (bus d'événements, tokens,
-behaviors, commandes, services) et tout le gameplay s'écrit en modules
-par-dessus — sans jamais modifier le noyau.
+VTTale turns a Hytale server into a tabletop RPG platform (VTT). It is a
+**framework**: the kernel provides the building blocks (event bus, tokens,
+behaviors, commands, services) and all gameplay is written as modules on top —
+without ever modifying the kernel.
 
-## Crédits
+> Documentation en français : [README.fr.md](README.fr.md)
 
-VTTale renaît grâce au travail des contributeurs du projet original et de ses
-sources d'inspiration :
+## Credits
+
+VTTale lives again thanks to the work of the original project's contributors
+and its sources of inspiration:
 
 - [Sparky200](https://github.com/Sparky200)
 - [PhoenixEpic](https://github.com/PhoenixEpic)
 - [giopalma](https://github.com/giopalma)
-- Le projet [VTTaleTeam/VTTale](https://github.com/VTTaleTeam/VTTale), dont ce
-  dépôt est le fork (branche `poc/VTT-38-Token-Registry`).
+- The [VTTaleTeam/VTTale](https://github.com/VTTaleTeam/VTTale) project, which
+  this repository forks (branch `poc/VTT-38-Token-Registry`).
 
 ## Architecture
 
-Un seul JAR plugin Hytale embarque tout :
+A single Hytale plugin JAR embeds everything:
 
-| Module | Rôle |
+| Module | Role |
 |---|---|
-| `api` | Contrats purs (`org.vttale.vttale.api`), zéro import Hytale |
-| `kernel` | Implémentations simples (bus à priorités, registries, services) |
-| `module` | Modules intégrés : chat, dés (`/roll`), tokens |
-| `gamesystem` | Systèmes de jeu — `dnd5e` sert d'exemple de squelette |
-| `platform/hytale` | Le plugin Hytale : bootstrap, pont vers l'API du jeu |
+| `api` | Pure contracts (`org.vttale.vttale.api`), zero Hytale imports |
+| `kernel` | Simple implementations (priority event bus, registries, services) |
+| `module` | Built-in modules: chat, dice (`/roll`), tokens |
+| `gamesystem` | Game systems — `dnd5e` is the example skeleton |
+| `platform/hytale` | The Hytale plugin: bootstrap, bridge to the game API |
 
-Voir `docs/architecture.md` pour le détail et le parcours « écrire un module ».
+See `docs/architecture.md` (French) for details and the "write a module" guide.
 
 ## Build
 
@@ -36,47 +38,47 @@ Voir `docs/architecture.md` pour le détail et le parcours « écrire un module 
 ./gradlew build
 ```
 
-Le JAR déployable est `platform/hytale/build/libs/VTTale-<version>-all.jar`.
+The deployable JAR is `platform/hytale/build/libs/VTTale-<version>-all.jar`.
 
-## Déploiement (test en jeu)
+## Deployment (in-game test)
 
-1. Copier `VTTale-<version>-all.jar` dans `%APPDATA%\Hytale\UserData\Mods`
-   (créer le dossier s'il manque).
-2. Lancer Hytale → créer un monde → roue crantée → Mods → vérifier que
-   **VTTale** est listé.
-3. En jeu : `/roll 2d6+3` doit répondre dans le chat ; un joueur qui se
-   connecte obtient un token (log serveur).
+1. Copy `VTTale-<version>-all.jar` into `%APPDATA%\Hytale\UserData\Mods`
+   (create the folder if missing).
+2. Launch Hytale → create a world → cogwheel → Mods → check that **VTTale** is
+   listed.
+3. In game: `/roll 2d6+3` should answer in chat; a player who connects gets a
+   token (server log).
 
-## Écrire un module tiers
+## Writing a third-party module
 
-1. Projet Java avec `org.vttale:vttale` (ou les sources de `api/`) en
+1. Java project with `org.vttale:vttale` (or the `api/` sources) as
    `compileOnly`.
-2. Écrire `class MonModule implements Module` (composants, behaviors,
-   événements — Java pur, testable hors Hytale). Deux déclarations
-   optionnelles :
-   - **`id()`** — identifiant unique (`"monplugin:monmodule"`), défaut : nom de
-     classe pleinement qualifié ; un doublon est refusé ;
-   - **`requires()`** — services nécessaires (`Set.of(DiceService.class)`) :
-     le module est mis en parc et activé dès qu'ils apparaissent, l'ordre
-     d'enregistrement n'a plus d'importance.
-3. Publier un plugin Hytale dont le `manifest.json` déclare
-   `"Dependencies": { "VTTALE:vttale": "*" }` et dont le `Main` (classe
-   étendant `JavaPlugin`) fait dans `setup()` :
+2. Write `class MyModule implements Module` (components, behaviors, events —
+   pure Java, testable outside Hytale). Two optional declarations:
+   - **`id()`** — unique identifier (`"myplugin:mymodule"`); default: fully
+     qualified class name; duplicates are refused.
+   - **`requires()`** — required services (`Set.of(DiceService.class)`): the
+     module is parked and enabled as soon as they appear, so registration
+     order no longer matters.
+3. Ship a Hytale plugin whose `manifest.json` declares
+   `"Dependencies": { "VTTALE:vttale": "*" }` and whose `Main` (class extending
+   `JavaPlugin`) does the following in `setup()`:
 
 ```java
-VTTale.getKernel().getModuleRegistry().registerModule(new MonModule());
+VTTale.getKernel().getModuleRegistry().registerModule(new MyModule());
 ```
 
-Les classloaders Hytale étant isolés par JAR, l'auto-enregistrement est le seul
-mécanisme de découverte inter-plugin.
+Hytale classloaders are isolated per JAR, so self-registration is the only
+cross-plugin discovery mechanism.
 
-## Contribuer
+## Contributing
 
-- Discussions en français ; code, commentaires, commits et Javadoc en anglais
-  (commits au format conventional, sans trailer).
-- Jamais directement sur `main` : branche de feature → push → **Pull Request**
-  vers `main` → merge après relecture, branche supprimée.
-- La suite doit rester verte : `./gradlew :api:test :kernel:test :module:test
-  :gamesystem:test` puis `./gradlew build`.
-- Changement d'architecture : une spec datée d'abord dans
-  `docs/superpowers/specs/`, puis le code, puis `docs/architecture.md`.
+- Discussions in French **or English**; code, comments, commits, and Javadoc in
+  English (conventional commits, no trailer).
+- Technical work (feature, refactor, bugfix): branch → push → **Pull Request**
+  to `main` → merge after review, branch deleted. Small touch-ups (docs,
+  typos, minor fixes): direct commit to `main` is fine.
+- Keep the suite green: `./gradlew :api:test :kernel:test :module:test
+  :gamesystem:test` then `./gradlew build`.
+- Architecture change: a dated spec first in `docs/superpowers/specs/`, then
+  the code, then `docs/architecture.md`.
