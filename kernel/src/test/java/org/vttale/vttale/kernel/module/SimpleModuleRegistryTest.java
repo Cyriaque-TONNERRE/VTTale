@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertIterableEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -26,22 +27,38 @@ class SimpleModuleRegistryTest {
         private final List<String> log;
         private final boolean failOnEnable;
         private final boolean failOnDisable;
+        private final Set<Class<?>> requires;
         Kernel seenKernel;
+
+        RecordingModule(String name, List<String> log) {
+            this(name, log, false, false, Set.of());
+        }
+
+        RecordingModule(String name, List<String> log, boolean failOnEnable, boolean failOnDisable) {
+            this(name, log, failOnEnable, failOnDisable, Set.of());
+        }
+
+        RecordingModule(String name, List<String> log, Set<Class<?>> requires) {
+            this(name, log, false, false, requires);
+        }
+
+        private RecordingModule(String name, List<String> log, boolean failOnEnable,
+                boolean failOnDisable, Set<Class<?>> requires) {
+            this.name = name;
+            this.log = log;
+            this.failOnEnable = failOnEnable;
+            this.failOnDisable = failOnDisable;
+            this.requires = requires;
+        }
 
         @Override
         public String id() {
             return name;
         }
 
-        RecordingModule(String name, List<String> log) {
-            this(name, log, false, false);
-        }
-
-        RecordingModule(String name, List<String> log, boolean failOnEnable, boolean failOnDisable) {
-            this.name = name;
-            this.log = log;
-            this.failOnEnable = failOnEnable;
-            this.failOnDisable = failOnDisable;
+        @Override
+        public Set<Class<?>> requires() {
+            return requires;
         }
 
         @Override
@@ -109,6 +126,44 @@ class SimpleModuleRegistryTest {
         @Override
         public void onDisable() {
             log.add("disable:" + id);
+        }
+    }
+
+    /** Marker service for tests; registered by the provider modules below. */
+    private interface SomeService {
+    }
+
+    /** Second marker service, independent of {@link SomeService}. */
+    private interface OtherService {
+    }
+
+    /** Logs its enable, then publishes itself as SomeService. */
+    private static class SomeServiceProviderModule extends RecordingModule implements SomeService {
+        SomeServiceProviderModule(String name, List<String> log, Set<Class<?>> requires) {
+            super(name, log, requires);
+        }
+
+        SomeServiceProviderModule(String name, List<String> log) {
+            super(name, log);
+        }
+
+        @Override
+        public void onEnable(Kernel kernel) {
+            super.onEnable(kernel);
+            kernel.registerService(SomeService.class, this);
+        }
+    }
+
+    /** Logs its enable, then publishes itself as OtherService. */
+    private static class OtherServiceProviderModule extends RecordingModule implements OtherService {
+        OtherServiceProviderModule(String name, List<String> log) {
+            super(name, log);
+        }
+
+        @Override
+        public void onEnable(Kernel kernel) {
+            super.onEnable(kernel);
+            kernel.registerService(OtherService.class, this);
         }
     }
 
@@ -258,5 +313,127 @@ class SimpleModuleRegistryTest {
         registry.registerModule(new RecordingModule("chat", log));
 
         assertIterableEquals(List.of("enable:dnd5e", "enable:chat"), log);
+    }
+
+    @Test
+    @DisplayName("a module with unmet requirements is parked, not enabled")
+    void moduleWithMissingServiceIsParked() {
+        registry.registerModule(new RecordingModule("late", log, Set.of(SomeService.class)));
+
+        assertEquals(List.of(), log);
+
+        // A parked module never saw onEnable, so it never sees onDisable.
+        registry.disableAll();
+        assertEquals(List.of(), log);
+    }
+
+    @Test
+    @DisplayName("a parked module activates when its provider registers later")
+    void parkedModuleActivatesWhenProviderArrives() {
+        registry.registerModule(new RecordingModule("consumer", log, Set.of(SomeService.class)));
+        registry.registerModule(new SomeServiceProviderModule("provider", log));
+
+        assertIterableEquals(List.of("enable:provider", "enable:consumer"), log);
+    }
+
+    @Test
+    @DisplayName("a chain of parked modules unfolds in dependency order")
+    void chainUnfoldsInOrder() {
+        registry.registerModule(new RecordingModule("a", log, Set.of(SomeService.class)));
+        registry.registerModule(new SomeServiceProviderModule("b", log, Set.of(OtherService.class)));
+        registry.registerModule(new OtherServiceProviderModule("c", log));
+
+        assertIterableEquals(List.of("enable:c", "enable:b", "enable:a"), log);
+    }
+
+    @Test
+    @DisplayName("no parked module activates while a provider's onEnable is running")
+    void noActivationDuringOnEnable() {
+        Module provider = new RecordingModule("p", log) {
+            @Override
+            public void onEnable(Kernel kernel) {
+                log.add("P:start");
+                kernel.registerService(SomeService.class, new SomeService() {
+                });
+                kernel.registerService(OtherService.class, new OtherService() {
+                });
+                log.add("P:end");
+            }
+        };
+        // The consumer requires ONLY the first service: requiring both would
+        // mask the bug (it could not resolve at the first registerService anyway).
+        registry.registerModule(new RecordingModule("c", log, Set.of(SomeService.class)));
+        registry.registerModule(provider);
+
+        assertIterableEquals(List.of("P:start", "P:end", "enable:c"), log,
+                "the consumer must not activate between the provider's two registerService calls");
+    }
+
+    @Test
+    @DisplayName("two parked game systems: first registered wins, deterministically")
+    void twoParkedGameSystemsFirstRegisteredWins() {
+        StubGameSystem gs1 = new StubGameSystem("gs1", log) {
+            @Override
+            public Set<Class<?>> requires() {
+                return Set.of(SomeService.class);
+            }
+        };
+        StubGameSystem gs2 = new StubGameSystem("gs2", log) {
+            @Override
+            public Set<Class<?>> requires() {
+                return Set.of(SomeService.class);
+            }
+        };
+
+        registry.registerModule(gs1);
+        registry.registerModule(gs2);
+        registry.registerModule(new SomeServiceProviderModule("provider", log));
+
+        assertIterableEquals(List.of("enable:provider", "enable:gs1"), log);
+        assertSame(gs1, kernel.getService(GameSystem.class));
+    }
+
+    @Test
+    @DisplayName("a module whose requires() throws is refused")
+    void requiresThrowingIsRefused() {
+        registry.registerModule(new RecordingModule("bad", log) {
+            @Override
+            public Set<Class<?>> requires() {
+                throw new IllegalStateException("boom");
+            }
+        });
+        registry.registerModule(new RecordingModule("ok", log));
+
+        assertIterableEquals(List.of("enable:ok"), log);
+    }
+
+    @Test
+    @DisplayName("a module returning null from requires() is refused")
+    void requiresNullIsRefused() {
+        registry.registerModule(new RecordingModule("bad", log) {
+            @Override
+            public Set<Class<?>> requires() {
+                return null;
+            }
+        });
+        registry.registerModule(new RecordingModule("ok", log));
+
+        assertIterableEquals(List.of("enable:ok"), log);
+    }
+
+    @Test
+    @DisplayName("a module with a null entry in requires() is refused")
+    void requiresNullEntryIsRefused() {
+        registry.registerModule(new RecordingModule("bad", log) {
+            @Override
+            public Set<Class<?>> requires() {
+                Set<Class<?>> withNull = new java.util.HashSet<>();
+                withNull.add(null);
+                return withNull;
+            }
+        });
+        registry.registerModule(new RecordingModule("ok", log));
+
+        assertIterableEquals(List.of("enable:ok"), log);
     }
 }
