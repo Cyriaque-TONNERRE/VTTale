@@ -209,7 +209,10 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     // unregister. getService(GameSystem.class) therefore still returns the disabled system.
     @Override
     public synchronized void disableAll() {
-        for (Module module : modules) {
+        // Reverse activation order: a dependent shuts down before its provider
+        // (activation order is a topological order of the dependency graph).
+        for (int i = modules.size() - 1; i >= 0; i--) {
+            Module module = modules.get(i);
             try {
                 module.onDisable();
             } catch (Throwable e) {

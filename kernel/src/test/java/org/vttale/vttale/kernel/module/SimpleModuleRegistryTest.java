@@ -250,7 +250,7 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
-    @DisplayName("disableAll disables every module in registration order and clears the registry")
+    @DisplayName("disableAll disables every module in reverse activation order and clears the registry")
     void disableAllIsIdempotent() {
         registry.registerModule(new RecordingModule("a", log));
         registry.registerModule(new RecordingModule("b", log));
@@ -259,8 +259,20 @@ class SimpleModuleRegistryTest {
         registry.disableAll();
 
         assertIterableEquals(
-                List.of("enable:a", "enable:b", "disable:a", "disable:b"), log,
+                List.of("enable:a", "enable:b", "disable:b", "disable:a"), log,
                 "the second disableAll() must be a no-op");
+    }
+
+    @Test
+    @DisplayName("disableAll releases reserved ids")
+    void disableAllReleasesIds() {
+        registry.registerModule(new RecordingModule("a", log));
+        registry.disableAll();
+
+        registry.registerModule(new RecordingModule("a", log));
+        registry.disableAll();
+
+        assertIterableEquals(List.of("enable:a", "disable:a", "enable:a", "disable:a"), log);
     }
 
     @Test
@@ -271,7 +283,7 @@ class SimpleModuleRegistryTest {
 
         assertDoesNotThrow(() -> registry.disableAll());
         assertIterableEquals(
-                List.of("enable:bad", "enable:good", "disable:bad", "disable:good"), log);
+                List.of("enable:bad", "enable:good", "disable:good", "disable:bad"), log);
     }
 
     @Test
