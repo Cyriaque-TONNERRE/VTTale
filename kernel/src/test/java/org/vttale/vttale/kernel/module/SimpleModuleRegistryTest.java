@@ -4,6 +4,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.vttale.vttale.api.Kernel;
+import org.vttale.vttale.api.events.Event;
+import org.vttale.vttale.api.events.EventContext;
 import org.vttale.vttale.api.gamesystem.GameSystem;
 import org.vttale.vttale.api.module.Module;
 import org.vttale.vttale.api.token.TokenComponent;
@@ -578,5 +580,37 @@ class SimpleModuleRegistryTest {
 
         assertDoesNotThrow(registry::reportPendingModules);
         assertEquals(List.of(), log);
+    }
+
+    /** Marker event for the save-point contract test. */
+    private static final class SaveFinishedEvent implements Event {
+    }
+
+    @Test
+    @DisplayName("during onDisable, services and the event bus still work: the save point")
+    void onDisableIsTheSavePoint() {
+        List<String> received = new ArrayList<>();
+        kernel.getEventBus().subscribe(SaveFinishedEvent.class, (event, context) ->
+                received.add("handler"));
+        registry.registerModule(new SomeServiceProviderModule("provider", log));
+        registry.registerModule(new RecordingModule("saver", log) {
+            @Override
+            public void onDisable() {
+                SomeService service = kernel.getService(SomeService.class);
+                log.add("disable:saver:service=" + (service != null));
+                kernel.getEventBus().publish(new SaveFinishedEvent(), new EventContext("KERNEL"));
+            }
+        });
+
+        registry.disableAll();
+
+        // Reverse order: saver disables first, reads a service published by
+        // provider, notifies through the bus. This is what "save in onDisable"
+        // relies on — nothing is unregistered during teardown.
+        assertIterableEquals(List.of(
+                "enable:provider", "enable:saver",
+                "disable:saver:service=true",
+                "disable:provider"), log);
+        assertIterableEquals(List.of("handler"), received);
     }
 }

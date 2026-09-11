@@ -64,10 +64,18 @@ public interface Module {
     void onEnable(Kernel kernel);
 
     /**
-     * Called when the module is disabled.
+     * Called once when the module is disabled, in reverse activation order
+     * (dependents before providers) — never twice, even if
+     * {@code disableAll()} runs again. This is the save point: services are
+     * still registered and the kernel bus still works, so serialize state
+     * here.
      * <p>
-     * Use this method to clean up resources and unregister any listeners.
-     * The default implementation does nothing.
+     * Keep the save fast and synchronous: a save that blocks hangs the server
+     * stop. Do not queue world work (a task submitted during shutdown may
+     * never run) and do not register modules or services (the registry is
+     * closed). Third-party modules: your plugin's Hytale registrations are
+     * already torn down by the time this runs — undo those in your plugin's
+     * own {@code shutdown()}, not here.
      * </p>
      */
     default void onDisable() {
