@@ -156,6 +156,22 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     }
 
     /**
+     * Boot-time report: logs every still-parked module at ERROR with the
+     * services it waits for. Called once by the platform at the end of
+     * setup(). Reports, never activates: parking is normal while plugins load,
+     * never-satisfied is the real problem - hence ERROR here, INFO at park
+     * time. Known ceiling: modules parked after this call (third-party plugins
+     * loading later) are only covered by their parking INFO line.
+     */
+    public synchronized void reportPendingModules() {
+        for (Module module : pending) {
+            Set<Class<?>> missing = unresolved(module);
+            String waiting = missing == null ? "unreadable requirements" : missing.toString();
+            LOGGER.log(Level.ERROR, "Module " + idOf(module) + " is still parked, waiting for " + waiting);
+        }
+    }
+
+    /**
      * The required services not yet registered, or null if {@code requires()}
      * threw, returned null or contained null - the module is unreadable either
      * way and the caller refuses it. Never lets third-party code escape.

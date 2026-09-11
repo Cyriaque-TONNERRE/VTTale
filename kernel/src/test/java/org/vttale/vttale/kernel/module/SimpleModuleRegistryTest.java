@@ -462,4 +462,19 @@ class SimpleModuleRegistryTest {
 
         assertIterableEquals(List.of("enable:ok"), log);
     }
+
+    @Test
+    @DisplayName("the boot report is a safe no-op with nothing parked")
+    void reportPendingIsSafeWithNothingParked() {
+        assertDoesNotThrow(registry::reportPendingModules);
+    }
+
+    @Test
+    @DisplayName("the boot report runs with parked modules and activates nothing")
+    void reportPendingWithParkedModulesActivatesNothing() {
+        registry.registerModule(new RecordingModule("waiting", log, Set.of(SomeService.class)));
+
+        assertDoesNotThrow(registry::reportPendingModules);
+        assertEquals(List.of(), log);
+    }
 }

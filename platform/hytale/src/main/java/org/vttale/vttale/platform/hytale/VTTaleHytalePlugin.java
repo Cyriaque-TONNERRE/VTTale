@@ -9,6 +9,7 @@ import org.vttale.vttale.api.module.ModuleRegistry;
 import org.vttale.vttale.api.token.TokenRegistry;
 import org.vttale.vttale.gamesystem.dnd5e.DND5EGameSystem;
 import org.vttale.vttale.kernel.VTTaleKernel;
+import org.vttale.vttale.kernel.module.SimpleModuleRegistry;
 import org.vttale.vttale.module.chat.ChatModule;
 import org.vttale.vttale.module.diceroll.DiceRollModule;
 import org.vttale.vttale.module.token.TokenModule;
@@ -43,6 +44,12 @@ public class VTTaleHytalePlugin extends JavaPlugin {
         modules.registerModule(new DiceRollModule());
         modules.registerModule(new TokenModule());
         modules.registerModule(new DND5EGameSystem());
+
+        // Report modules still parked on missing services. instanceof, not a
+        // cast: a diagnostic must never fail the boot if the impl changes.
+        if (modules instanceof SimpleModuleRegistry registry) {
+            registry.reportPendingModules();
+        }
 
         TokenRegistry tokens = kernel.getService(TokenRegistry.class);
         if (tokens != null) {
