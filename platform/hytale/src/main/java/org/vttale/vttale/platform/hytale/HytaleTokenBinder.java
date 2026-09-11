@@ -23,10 +23,12 @@ import org.vttale.vttale.api.token.events.TokenBoundEvent;
 import org.vttale.vttale.api.token.events.TokenRemovedEvent;
 import org.vttale.vttale.api.token.events.TokenUpdatedEvent;
 
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -51,6 +53,10 @@ public class HytaleTokenBinder implements Module {
 
     private final JavaPlugin plugin;
     private TokenRegistry tokenRegistry;
+    // Set in onDisable before anything else: kernel subscriptions cannot be
+    // removed, so the handlers gate on this flag instead. Volatile: token
+    // events arrive from world threads, onDisable runs on another.
+    private volatile boolean disabled;
     // Null until onEnable: a parked module is disabled without having been enabled.
     private EventRegistration<Void, PlayerConnectEvent> playerConnectRegistration;
     private EventRegistration<Void, PlayerDisconnectEvent> playerDisconnectRegistration;
@@ -90,16 +96,28 @@ public class HytaleTokenBinder implements Module {
 
     @Override
     public void onDisable() {
-        // Hytale side: the event registry hands back registrations that can be
-        // undone. Kernel side: EventBus has no unsubscribe, so the VTTale
-        // subscriptions live until the JVM dies - shutdown is terminal here.
-        if (playerConnectRegistration != null) {
-            playerConnectRegistration.unregister();
-        }
-        if (playerDisconnectRegistration != null) {
-            playerDisconnectRegistration.unregister();
-        }
+        disabled = true;
+        unregisterQuietly(playerConnectRegistration);
+        unregisterQuietly(playerDisconnectRegistration);
+        playerConnectRegistration = null;
+        playerDisconnectRegistration = null;
         LOGGER.info("HytaleTokenBinder disabled");
+    }
+
+    /**
+     * Unregisters one Hytale event listener. One failure must not prevent the
+     * next unregister, and a null registration (parked module never enabled,
+     * or already disabled) is a no-op - double disable stays safe.
+     */
+    private static void unregisterQuietly(EventRegistration<Void, ?> registration) {
+        if (registration == null) {
+            return;
+        }
+        try {
+            registration.unregister();
+        } catch (RuntimeException e) {
+            LOGGER.log(Level.WARNING, "Failed to unregister " + registration.getEventClass().getSimpleName(), e);
+        }
     }
 
     // ==================== VTTale Token Events ====================
@@ -108,6 +126,9 @@ public class HytaleTokenBinder implements Module {
      * Handles token binding/unbinding events.
      */
     private void onTokenBound(TokenBoundEvent event, EventContext context) {
+        if (disabled) {
+            return;
+        }
         Token token = event.getToken();
 
         // Handles token binding/unbinding; logs and syncs as needed
@@ -129,6 +150,9 @@ public class HytaleTokenBinder implements Module {
      * Handles token update events.
      */
     private void onTokenUpdated(TokenUpdatedEvent event, EventContext context) {
+        if (disabled) {
+            return;
+        }
         Token token = event.getToken();
 
         // Only sync if token is bound to an entity
@@ -148,6 +172,9 @@ public class HytaleTokenBinder implements Module {
      * Handles token removal events.
      */
     private void onTokenRemoved(TokenRemovedEvent event, EventContext context) {
+        if (disabled) {
+            return;
+        }
         // If the token was bound to an entity, log it
         // Note: We don't auto-despawn entities here, as the entity might be
         // a player or have other purposes. Let the caller handle despawning.
@@ -286,6 +313,7 @@ public class HytaleTokenBinder implements Module {
      * @return the created token
      */
     public Token createTokenForPlayer(UUID playerId, String playerName) {
+        Objects.requireNonNull(tokenRegistry, "binder not enabled");
         Token token = tokenRegistry.create(playerName, CoreTokenType.PLAYER_CHARACTER, playerId);
         LOGGER.info("Created token for player: " + playerName);
         return token;
