@@ -278,12 +278,12 @@ class SimpleModuleRegistryTest {
     @Test
     @DisplayName("a module that throws on disable does not block the others")
     void failingDisableIsContained() {
-        registry.registerModule(new RecordingModule("bad", log, false, true));
         registry.registerModule(new RecordingModule("good", log));
+        registry.registerModule(new RecordingModule("bad", log, false, true));
 
         assertDoesNotThrow(() -> registry.disableAll());
         assertIterableEquals(
-                List.of("enable:bad", "enable:good", "disable:good", "disable:bad"), log);
+                List.of("enable:good", "enable:bad", "disable:bad", "disable:good"), log);
     }
 
     @Test
