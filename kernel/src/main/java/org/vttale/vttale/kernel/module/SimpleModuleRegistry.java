@@ -275,6 +275,9 @@ public class SimpleModuleRegistry implements ModuleRegistry {
     // unregister. getService(GameSystem.class) therefore still returns the disabled system.
     @Override
     public synchronized void disableAll() {
+        if (closed) {
+            return; // already shut down - covers a re-entrant call from an onDisable
+        }
         // Closed BEFORE the loop, not after: an onDisable that re-enters the
         // registry must be refused, not activated mid-teardown (see the field
         // comment). Second call: empty lists, closed already true — a no-op.

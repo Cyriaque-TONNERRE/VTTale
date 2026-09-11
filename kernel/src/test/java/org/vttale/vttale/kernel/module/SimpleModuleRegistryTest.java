@@ -278,6 +278,31 @@ class SimpleModuleRegistryTest {
     }
 
     @Test
+    @DisplayName("disableAll re-entered from an onDisable is a no-op: each module disables exactly once")
+    void reentrantDisableAllIsIgnored() {
+        registry.registerModule(new RecordingModule("a", log));
+        registry.registerModule(new RecordingModule("self", log) {
+            @Override
+            public void onDisable() {
+                log.add("disable:self:start");
+                registry.disableAll();
+                log.add("disable:self:end");
+            }
+        });
+
+        registry.disableAll();
+
+        // Reverse order: "self" disables first and re-enters disableAll —
+        // refused because the registry is already closed, so there is no
+        // recursion and "a" is not disabled twice. The outer loop then
+        // disables "a" exactly once.
+        assertIterableEquals(List.of(
+                "enable:a", "enable:self",
+                "disable:self:start", "disable:self:end",
+                "disable:a"), log);
+    }
+
+    @Test
     @DisplayName("a module registered from inside an onDisable is refused, never enabled")
     void registrationFromOnDisableIsRefused() {
         Module selfish = new RecordingModule("selfish", log) {
