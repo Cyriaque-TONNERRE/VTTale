@@ -351,49 +351,53 @@ public class HytaleTokenBinder implements Module, PlayerCloneService {
             return future;
         }
 
-        World world = Universe.get().getDefaultWorld();
-        if (world == null) {
-            // Guarded before world.execute so the future can never be left pending.
-            future.completeExceptionally(new IllegalStateException("No world available"));
-            return future;
-        }
-        world.execute(() -> {
-            try {
-                Store<EntityStore> store = world.getEntityStore().getStore();
-                Entity source = world.getEntity(sourcePlayerUuid);
-                if (source == null) {
-                    future.completeExceptionally(new IllegalStateException("Source entity not found"));
-                    return;
-                }
-                PlayerSkinComponent skinComponent = store.getComponent(
-                        source.getReference(), PlayerSkinComponent.getComponentType());
-                if (skinComponent == null) {
-                    future.completeExceptionally(
-                            new IllegalStateException("Player has no skin component"));
-                    return;
-                }
-                // Defensive copy: the component may be mutated by a later skin update.
-                PlayerSkin skin = new PlayerSkin(skinComponent.getPlayerSkin());
-                Model model = CosmeticsModule.get().createModel(skin);
-
-                Vector3d position = new Vector3d(player.getTransform().getPosition());
-                int roleIndex = NPCPlugin.get().getIndex(NPC_ROLE_NAME);
-                var pair = NPCPlugin.get().spawnEntity(store, roleIndex, position, null, model,
-                        (npc, ref, entityStore) -> entityStore.putComponent(ref,
-                                PlayerSkinComponent.getComponentType(),
-                                new PlayerSkinComponent(skin)));
-                if (pair == null) {
-                    future.completeExceptionally(new IllegalStateException(
-                            "Unknown NPC role \"" + NPC_ROLE_NAME + "\". Available: "
-                                    + NPCPlugin.get().getRoleTemplateNames(true)));
-                    return;
-                }
-                future.complete(store.getComponent(pair.first(),
-                        UUIDComponent.getComponentType()).getUuid());
-            } catch (Throwable t) {
-                future.completeExceptionally(t);
+        try {
+            World world = Universe.get().getDefaultWorld();
+            if (world == null) {
+                // Guarded before world.execute so the future can never be left pending.
+                future.completeExceptionally(new IllegalStateException("No world available"));
+                return future;
             }
-        });
+            world.execute(() -> {
+                try {
+                    Store<EntityStore> store = world.getEntityStore().getStore();
+                    Entity source = world.getEntity(sourcePlayerUuid);
+                    if (source == null) {
+                        future.completeExceptionally(new IllegalStateException("Source entity not found"));
+                        return;
+                    }
+                    PlayerSkinComponent skinComponent = store.getComponent(
+                            source.getReference(), PlayerSkinComponent.getComponentType());
+                    if (skinComponent == null) {
+                        future.completeExceptionally(
+                                new IllegalStateException("Player has no skin component"));
+                        return;
+                    }
+                    // Defensive copy: the component may be mutated by a later skin update.
+                    PlayerSkin skin = new PlayerSkin(skinComponent.getPlayerSkin());
+                    Model model = CosmeticsModule.get().createModel(skin);
+
+                    Vector3d position = new Vector3d(player.getTransform().getPosition());
+                    int roleIndex = NPCPlugin.get().getIndex(NPC_ROLE_NAME);
+                    var pair = NPCPlugin.get().spawnEntity(store, roleIndex, position, null, model,
+                            (npc, ref, entityStore) -> entityStore.putComponent(ref,
+                                    PlayerSkinComponent.getComponentType(),
+                                    new PlayerSkinComponent(skin)));
+                    if (pair == null) {
+                        future.completeExceptionally(new IllegalStateException(
+                                "Unknown NPC role \"" + NPC_ROLE_NAME + "\". Available: "
+                                        + NPCPlugin.get().getRoleTemplateNames(true)));
+                        return;
+                    }
+                    future.complete(store.getComponent(pair.first(),
+                            UUIDComponent.getComponentType()).getUuid());
+                } catch (Throwable t) {
+                    future.completeExceptionally(t);
+                }
+            });
+        } catch (Throwable t) {
+            future.completeExceptionally(t);
+        }
 
         return future;
     }
