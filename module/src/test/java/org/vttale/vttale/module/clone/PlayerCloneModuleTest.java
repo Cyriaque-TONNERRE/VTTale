@@ -217,6 +217,38 @@ class PlayerCloneModuleTest {
     }
 
     @Test
+    @DisplayName("a failed spawn releases the in-flight guard: /clone can be retried")
+    void retryAfterFailedSpawn() {
+        clones.failNextSpawn = true;
+        run("clone", PLAYER);
+        assertEquals("[VTT] Clone failed: boom", lastMessage());
+
+        clones.failNextSpawn = false;
+        out.clear();
+        run("clone", PLAYER);
+
+        assertEquals("[VTT] Clone spawned.", lastMessage());
+        assertEquals(1, tokens().getByOwner(PLAYER_ID).size());
+    }
+
+    @Test
+    @DisplayName("a messageless failure reports the throwable class, not \"null\"")
+    void failedSpawnWithMessagelessThrowable() {
+        clones = new FakeCloneService() {
+            @Override
+            public CompletableFuture<UUID> spawnClone(UUID sourcePlayerUuid) {
+                spawnCalls.add(sourcePlayerUuid);
+                return CompletableFuture.failedFuture(new NullPointerException());
+            }
+        };
+        boot(clones);
+
+        run("clone", PLAYER);
+
+        assertEquals("[VTT] Clone failed: java.lang.NullPointerException", lastMessage());
+    }
+
+    @Test
     @DisplayName("offline source at completion time falls back to the uuid in the token name")
     void nameFallbackOnOffline() {
         clones = new FakeCloneService() {
@@ -250,6 +282,8 @@ class PlayerCloneModuleTest {
         run("unclone", PLAYER, "Bob");
 
         assertEquals("[VTT] Removed Bob's clone.", lastMessage());
+        assertEquals(0, tokens().getByOwner(PLAYER_ID).size(),
+                "the clone token must be gone, not just untagged");
         assertTrue(tokens().getByOwner(PLAYER_ID).stream()
                 .noneMatch(t -> t.getTags().contains(PlayerCloneModule.CLONE_TAG)));
     }
@@ -260,5 +294,27 @@ class PlayerCloneModuleTest {
         run("unclone", PLAYER);
 
         assertEquals("[VTT] Bob has no clone.", lastMessage());
+    }
+
+    @Test
+    @DisplayName("/unclone removes the figurine of an offline source via the exact token name")
+    void uncloneOfflineSourceByExactTokenName() {
+        // Simulate Bob being offline: resolvePlayer returns null on this fake.
+        // A fresh kernel is needed because the module captured the previous
+        // service at enable time; it has no memory of any spawn, so the clone
+        // token is created directly through the real registry.
+        boot(new FakeCloneService());
+
+        TokenRegistry tokens = tokens();
+        Token token = tokens.create("Bob (clone)", CoreTokenType.PLAYER_CHARACTER, PLAYER_ID);
+        token.addTag(PlayerCloneModule.CLONE_TAG);
+        tokens.bindToEntity(token.getId(), ENTITY);
+        assertEquals(1, tokens.getByOwner(PLAYER_ID).size());
+
+        run("unclone", PLAYER, "Bob");
+
+        assertEquals("[VTT] Removed Bob's clone.", lastMessage());
+        assertEquals(0, tokens().getByOwner(PLAYER_ID).size(),
+                "the offline player's clone token must be gone");
     }
 }

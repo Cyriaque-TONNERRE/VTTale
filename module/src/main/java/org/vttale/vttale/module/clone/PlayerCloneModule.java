@@ -13,6 +13,8 @@ import org.vttale.vttale.module.chat.SendMessageEvent;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Player clones as static figurines: /clone spawns an entity wearing the
@@ -30,6 +32,8 @@ public class PlayerCloneModule implements Module {
     public static final String CLONE_TAG = "clone";
 
     private static final String NAME_SUFFIX = " (clone)";
+
+    private static final Logger LOGGER = Logger.getLogger(PlayerCloneModule.class.getName());
 
     private EventBus eventBus;
     private TokenRegistry tokens;
@@ -76,22 +80,41 @@ public class PlayerCloneModule implements Module {
         if (source == null) {
             return; // reply already sent
         }
-        if (pending.contains(source) || findClone(source) != null) {
+        // Atomic claim: the completion callback runs on the Hytale world thread
+        // (World.execute always queues), so check-then-act against the registry
+        // would race a concurrent /clone on the command thread.
+        if (!pending.add(source)) {
             reply(context, sourceName(source) + " already has a clone.");
             return;
         }
-        pending.add(source);
-        clones.spawnClone(source).whenComplete((entityId, error) -> {
+        Token existing = findClone(source);
+        if (existing != null) {
             pending.remove(source);
-            if (error != null) {
-                reply(context, "Clone failed: " + error.getMessage());
-                return;
+            reply(context, sourceName(source) + " already has a clone.");
+            return;
+        }
+        // The completion callback intentionally runs on the world thread
+        // (World.execute queues): the registry and the bus are thread-safe.
+        clones.spawnClone(source).whenComplete((entityId, error) -> {
+            try {
+                if (error != null) {
+                    reply(context, "Clone failed: "
+                            + (error.getMessage() != null ? error.getMessage() : error.toString()));
+                    return;
+                }
+                Token token = tokens.create(sourceName(source) + NAME_SUFFIX,
+                        CoreTokenType.PLAYER_CHARACTER, source);
+                token.addTag(CLONE_TAG);
+                tokens.bindToEntity(token.getId(), entityId);
+                reply(context, "Clone spawned.");
+            } catch (Throwable t) {
+                // Logged, never silent: a failure here would otherwise leave a
+                // spawned entity untracked (no token, no reply).
+                LOGGER.log(Level.WARNING, "Clone completion failed", t);
+                reply(context, "Clone failed: " + t.getMessage());
+            } finally {
+                pending.remove(source);
             }
-            Token token = tokens.create(sourceName(source) + NAME_SUFFIX,
-                    CoreTokenType.PLAYER_CHARACTER, source);
-            token.addTag(CLONE_TAG);
-            tokens.bindToEntity(token.getId(), entityId);
-            reply(context, "Clone spawned.");
         });
     }
 
@@ -101,10 +124,31 @@ public class PlayerCloneModule implements Module {
             reply(context, "Usage: /unclone [player]");
             return;
         }
-        UUID source = resolveTarget(args, context);
-        if (source == null) {
+        if (args.length == 1) {
+            UUID source = clones.resolvePlayer(args[0]);
+            if (source == null) {
+                // Offline source: the figurine must stay removable, so fall back
+                // to the exact clone-token name instead of giving up.
+                Token byName = findCloneByName(args[0]);
+                if (byName == null) {
+                    reply(context, args[0] + " has no clone.");
+                    return;
+                }
+                tokens.remove(byName);
+                reply(context, "Removed " + args[0] + "'s clone.");
+                return;
+            }
+            removeClone(context, source);
             return;
         }
+        UUID source = resolveTarget(args, context);
+        if (source == null) {
+            return; // console without argument: reply already sent
+        }
+        removeClone(context, source);
+    }
+
+    private void removeClone(EventContext context, UUID source) {
         Token clone = findClone(source);
         if (clone == null) {
             reply(context, sourceName(source) + " has no clone.");
@@ -137,6 +181,17 @@ public class PlayerCloneModule implements Module {
     private Token findClone(UUID source) {
         for (Token token : tokens.getByOwner(source)) {
             if (token.getTags().contains(CLONE_TAG)) {
+                return token;
+            }
+        }
+        return null;
+    }
+
+    // ponytail: exact-name match; enough for /unclone
+    private Token findCloneByName(String playerName) {
+        for (Token token : tokens.getAll()) {
+            if (token.getTags().contains(CLONE_TAG)
+                    && token.getName().equals(playerName + NAME_SUFFIX)) {
                 return token;
             }
         }

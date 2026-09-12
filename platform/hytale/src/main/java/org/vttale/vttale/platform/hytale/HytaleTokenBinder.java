@@ -45,6 +45,8 @@ import java.util.logging.Logger;
  * - Creating Hytale entities when tokens are spawned<br />
  * - Synchronizing token data to entities (position, name, etc.)<br />
  * - Managing the token-entity binding lifecycle<br />
+ * - Despawning a token's bound non-player entity when the token is removed
+ * (TokenRemovedEvent)<br />
  * - Spawning skinned player clones ({@link PlayerCloneService}, consumed by
  * PlayerCloneModule)
  * <p>
@@ -172,7 +174,9 @@ public class HytaleTokenBinder implements Module, PlayerCloneService {
         // A removed token means a removed figurine: despawn its bound entity.
         // Player entities are never despawned this way.
         event.getBoundEntityId().ifPresent(entityId -> {
+            // Unknown world id falls back to the default world; getEntity returns null there and nothing is despawned.
             World world = event.getToken()
+                    .filter(t -> t.getWorldId().isPresent())
                     .map(this::getWorldForToken)
                     .orElseGet(Universe.get()::getDefaultWorld);
             if (world == null) {
@@ -344,14 +348,18 @@ public class HytaleTokenBinder implements Module, PlayerCloneService {
     public CompletableFuture<UUID> spawnClone(UUID sourcePlayerUuid) {
         CompletableFuture<UUID> future = new CompletableFuture<>();
 
-        PlayerRef player = Universe.get().getPlayer(sourcePlayerUuid);
-        if (player == null) {
-            future.completeExceptionally(
-                    new IllegalArgumentException("No online player with uuid " + sourcePlayerUuid));
+        if (disabled) {
+            future.completeExceptionally(new IllegalStateException("VTTale is shutting down"));
             return future;
         }
 
         try {
+            PlayerRef player = Universe.get().getPlayer(sourcePlayerUuid);
+            if (player == null) {
+                future.completeExceptionally(
+                        new IllegalArgumentException("No online player with uuid " + sourcePlayerUuid));
+                return future;
+            }
             World world = Universe.get().getDefaultWorld();
             if (world == null) {
                 // Guarded before world.execute so the future can never be left pending.
@@ -363,7 +371,9 @@ public class HytaleTokenBinder implements Module, PlayerCloneService {
                     Store<EntityStore> store = world.getEntityStore().getStore();
                     Entity source = world.getEntity(sourcePlayerUuid);
                     if (source == null) {
-                        future.completeExceptionally(new IllegalStateException("Source entity not found"));
+                        future.completeExceptionally(new IllegalStateException(
+                                "Source entity not found in the default world"
+                                        + " (multi-world is not supported yet)"));
                         return;
                     }
                     PlayerSkinComponent skinComponent = store.getComponent(
@@ -399,7 +409,8 @@ public class HytaleTokenBinder implements Module, PlayerCloneService {
             future.completeExceptionally(t);
         }
 
-        return future;
+        // World.execute only queues: a task queued right before world shutdown would otherwise never complete and leak the caller's in-flight guard.
+        return future.orTimeout(10, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     @Override
