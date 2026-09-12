@@ -66,7 +66,8 @@ public class HytaleTokenBinder implements Module, PlayerCloneService {
     private final JavaPlugin plugin;
     private TokenRegistry tokenRegistry;
     // Set in onDisable before anything else: the kill switch for the three
-    // token-event handlers. Kernel subscriptions cannot be removed at all.
+    // token-event handlers and spawnClone. Kernel subscriptions cannot be
+    // removed at all.
     // Volatile: events arrive from world threads, onDisable runs on another.
     private volatile boolean disabled;
 

@@ -111,7 +111,8 @@ public class PlayerCloneModule implements Module {
                 // Logged, never silent: a failure here would otherwise leave a
                 // spawned entity untracked (no token, no reply).
                 LOGGER.log(Level.WARNING, "Clone completion failed", t);
-                reply(context, "Clone failed: " + t.getMessage());
+                reply(context, "Clone failed: "
+                        + (t.getMessage() != null ? t.getMessage() : t.toString()));
             } finally {
                 pending.remove(source);
             }
