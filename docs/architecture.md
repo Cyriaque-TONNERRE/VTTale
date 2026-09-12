@@ -21,7 +21,7 @@ A single Hytale plugin JAR embeds the whole framework:
 VTTale/
 ├── api/                 # pure contracts, org.vttale.vttale — ZERO Hytale imports
 ├── kernel/              # simple impls (VTTaleKernel, SimpleEventBus, registries)
-├── module/              # built-in modules: chat, diceroll, token
+├── module/              # built-in modules: chat, diceroll, token, clone
 ├── gamesystem/          # dnd5e — example skeleton of a game system
 └── platform/hytale/     # THE Hytale plugin: bootstrap + bridge to the game API
 ```
@@ -141,6 +141,8 @@ CommandRegistry.registerCommand(name, description[, options])
 → CommandExecutedEvent (the module receives the invocation)
 → replies via PlatformBroadcastEvent (CONSOLE or PlayerRef)
 ```
+
+- `/clone [player]` — spawn a static figurine wearing the player's skin (one clone per player); `/unclone [player]` — remove it (module `clone`, token tagged `clone`).
 
 ## Token model
 

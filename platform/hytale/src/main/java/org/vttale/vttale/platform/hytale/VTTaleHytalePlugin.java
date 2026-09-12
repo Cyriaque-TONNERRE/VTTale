@@ -10,6 +10,7 @@ import org.vttale.vttale.gamesystem.dnd5e.DND5EGameSystem;
 import org.vttale.vttale.kernel.VTTaleKernel;
 import org.vttale.vttale.kernel.module.SimpleModuleRegistry;
 import org.vttale.vttale.module.chat.ChatModule;
+import org.vttale.vttale.module.clone.PlayerCloneModule;
 import org.vttale.vttale.module.diceroll.DiceRollModule;
 import org.vttale.vttale.module.token.TokenModule;
 
@@ -50,6 +51,7 @@ public class VTTaleHytalePlugin extends JavaPlugin {
         modules.registerModule(new ChatModule());
         modules.registerModule(new DiceRollModule());
         modules.registerModule(new TokenModule());
+        modules.registerModule(new PlayerCloneModule());
         modules.registerModule(new DND5EGameSystem());
         modules.registerModule(new HytaleTokenBinder(this));
 
