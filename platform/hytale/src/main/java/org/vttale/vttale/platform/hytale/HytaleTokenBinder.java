@@ -1,10 +1,20 @@
 package org.vttale.vttale.platform.hytale;
 
+import com.hypixel.hytale.component.Store;
+import com.hypixel.hytale.protocol.PlayerSkin;
+import com.hypixel.hytale.server.core.NameMatching;
+import com.hypixel.hytale.server.core.asset.type.model.config.Model;
+import com.hypixel.hytale.server.core.cosmetics.CosmeticsModule;
 import com.hypixel.hytale.server.core.entity.Entity;
+import com.hypixel.hytale.server.core.entity.UUIDComponent;
 import com.hypixel.hytale.server.core.entity.entities.Player;
+import com.hypixel.hytale.server.core.modules.entity.player.PlayerSkinComponent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.Universe;
 import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+import com.hypixel.hytale.server.npc.NPCPlugin;
 import org.joml.Vector3d;
 import org.joml.Vector3f;
 import org.vttale.vttale.api.Kernel;
@@ -17,6 +27,7 @@ import org.vttale.vttale.api.token.TokenRegistry;
 import org.vttale.vttale.api.token.events.TokenBoundEvent;
 import org.vttale.vttale.api.token.events.TokenRemovedEvent;
 import org.vttale.vttale.api.token.events.TokenUpdatedEvent;
+import org.vttale.vttale.module.clone.PlayerCloneService;
 
 import java.util.Objects;
 import java.util.Set;
@@ -33,15 +44,22 @@ import java.util.logging.Logger;
  * Responsibilities:<br />
  * - Creating Hytale entities when tokens are spawned<br />
  * - Synchronizing token data to entities (position, name, etc.)<br />
- * - Managing the token-entity binding lifecycle
+ * - Managing the token-entity binding lifecycle<br />
+ * - Spawning skinned player clones ({@link PlayerCloneService}, consumed by
+ * PlayerCloneModule)
  * <p>
  * Thread Safety:
  * All Hytale entity access is performed via world.execute() to ensure
  * thread safety with Hytale's ECS system.
  */
-public class HytaleTokenBinder implements Module {
+public class HytaleTokenBinder implements Module, PlayerCloneService {
 
     private static final Logger LOGGER = Logger.getLogger(HytaleTokenBinder.class.getName());
+
+    // Set after the first in-game validation of /clone: pick a spawnable
+    // humanoid role from Server/NPC/Roles. Wrong value = /clone fails with
+    // "unknown NPC role" and logs the valid names.
+    private static final String NPC_ROLE_NAME = "Humanoid";
 
     private final JavaPlugin plugin;
     private TokenRegistry tokenRegistry;
@@ -75,6 +93,17 @@ public class HytaleTokenBinder implements Module {
         eventBus.subscribe(TokenBoundEvent.class, this::onTokenBound);
         eventBus.subscribe(TokenUpdatedEvent.class, this::onTokenUpdated);
         eventBus.subscribe(TokenRemovedEvent.class, this::onTokenRemoved);
+
+        // Other modules (PlayerCloneModule) spawn skinned figurines through us.
+        kernel.registerService(PlayerCloneService.class, this);
+
+        // Discovery aid until NPC_ROLE_NAME is validated in game.
+        try {
+            LOGGER.info("Spawnable NPC roles: " + String.join(", ",
+                    NPCPlugin.get().getRoleTemplateNames(true)));
+        } catch (RuntimeException e) {
+            LOGGER.warning("Could not list NPC roles (NPC plugin not loaded yet?): " + e.getMessage());
+        }
 
         LOGGER.info("HytaleTokenBinder enabled");
     }
@@ -140,11 +169,25 @@ public class HytaleTokenBinder implements Module {
         if (disabled) {
             return;
         }
-        // If the token was bound to an entity, log it
-        // Note: We don't auto-despawn entities here, as the entity might be
-        // a player or have other purposes. Let the caller handle despawning.
+        // A removed token means a removed figurine: despawn its bound entity.
+        // Player entities are never despawned this way.
         event.getBoundEntityId().ifPresent(entityId -> {
-            LOGGER.fine("Token " + event.getTokenName() + " removed, was bound to entity " + entityId);
+            World world = event.getToken()
+                    .map(this::getWorldForToken)
+                    .orElseGet(Universe.get()::getDefaultWorld);
+            if (world == null) {
+                LOGGER.warning("Cannot despawn entity " + entityId
+                        + " for removed token " + event.getTokenName() + ": world not found");
+                return;
+            }
+            world.execute(() -> {
+                Entity entity = world.getEntity(entityId);
+                if (entity != null && !(entity instanceof Player)) {
+                    entity.remove();
+                    LOGGER.fine("Despawned entity " + entityId
+                            + " for removed token " + event.getTokenName());
+                }
+            });
         });
     }
 
@@ -293,6 +336,78 @@ public class HytaleTokenBinder implements Module {
         LOGGER.info("Despawned entity for token: " + token.getName());
 
         return true;
+    }
+
+    // ==================== PlayerCloneService ====================
+
+    @Override
+    public CompletableFuture<UUID> spawnClone(UUID sourcePlayerUuid) {
+        CompletableFuture<UUID> future = new CompletableFuture<>();
+
+        PlayerRef player = Universe.get().getPlayer(sourcePlayerUuid);
+        if (player == null) {
+            future.completeExceptionally(
+                    new IllegalArgumentException("No online player with uuid " + sourcePlayerUuid));
+            return future;
+        }
+
+        World world = Universe.get().getDefaultWorld();
+        if (world == null) {
+            // Guarded before world.execute so the future can never be left pending.
+            future.completeExceptionally(new IllegalStateException("No world available"));
+            return future;
+        }
+        world.execute(() -> {
+            try {
+                Store<EntityStore> store = world.getEntityStore().getStore();
+                Entity source = world.getEntity(sourcePlayerUuid);
+                if (source == null) {
+                    future.completeExceptionally(new IllegalStateException("Source entity not found"));
+                    return;
+                }
+                PlayerSkinComponent skinComponent = store.getComponent(
+                        source.getReference(), PlayerSkinComponent.getComponentType());
+                if (skinComponent == null) {
+                    future.completeExceptionally(
+                            new IllegalStateException("Player has no skin component"));
+                    return;
+                }
+                // Defensive copy: the component may be mutated by a later skin update.
+                PlayerSkin skin = new PlayerSkin(skinComponent.getPlayerSkin());
+                Model model = CosmeticsModule.get().createModel(skin);
+
+                Vector3d position = new Vector3d(player.getTransform().getPosition());
+                int roleIndex = NPCPlugin.get().getIndex(NPC_ROLE_NAME);
+                var pair = NPCPlugin.get().spawnEntity(store, roleIndex, position, null, model,
+                        (npc, ref, entityStore) -> entityStore.putComponent(ref,
+                                PlayerSkinComponent.getComponentType(),
+                                new PlayerSkinComponent(skin)));
+                if (pair == null) {
+                    future.completeExceptionally(new IllegalStateException(
+                            "Unknown NPC role \"" + NPC_ROLE_NAME + "\". Available: "
+                                    + NPCPlugin.get().getRoleTemplateNames(true)));
+                    return;
+                }
+                future.complete(store.getComponent(pair.first(),
+                        UUIDComponent.getComponentType()).getUuid());
+            } catch (Throwable t) {
+                future.completeExceptionally(t);
+            }
+        });
+
+        return future;
+    }
+
+    @Override
+    public UUID resolvePlayer(String playerName) {
+        PlayerRef player = Universe.get().getPlayerByUsername(playerName, NameMatching.EXACT);
+        return player != null ? player.getUuid() : null;
+    }
+
+    @Override
+    public String playerName(UUID playerUuid) {
+        PlayerRef player = Universe.get().getPlayer(playerUuid);
+        return player != null ? player.getUsername() : null;
     }
 
     // ==================== Utility Methods ====================
