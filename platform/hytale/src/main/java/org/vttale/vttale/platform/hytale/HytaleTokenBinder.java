@@ -58,10 +58,11 @@ public class HytaleTokenBinder implements Module, PlayerCloneService {
 
     private static final Logger LOGGER = Logger.getLogger(HytaleTokenBinder.class.getName());
 
-    // Set after the first in-game validation of /clone: pick a spawnable
-    // humanoid role from Server/NPC/Roles. Wrong value = /clone fails with
-    // "unknown NPC role" and logs the valid names.
-    private static final String NPC_ROLE_NAME = "Humanoid";
+    // Static role: no AI, the figurine stays put; the model (and thus the
+    // appearance) is overridden by the cloned player's skin at spawn time.
+    // Validated in game against the role list logged at boot; if /clone ever
+    // fails again, the error message lists the valid names.
+    private static final String NPC_ROLE_NAME = "Static";
 
     private final JavaPlugin plugin;
     private TokenRegistry tokenRegistry;
