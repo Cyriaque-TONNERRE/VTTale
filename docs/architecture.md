@@ -142,7 +142,11 @@ CommandRegistry.registerCommand(name, description[, options])
 → replies via PlatformBroadcastEvent (CONSOLE or PlayerRef)
 ```
 
-- `/clone [player]` — spawn a static figurine wearing the player's skin (one clone per player); `/unclone [player]` — remove it (module `clone`, token tagged `clone`).
+Player-facing commands provided by built-in modules:
+
+- `/clone [player]` — spawn a static figurine wearing the player's skin (one
+  clone per player); `/unclone [player]` — remove it (module `clone`, token
+  tagged `clone`).
 
 ## Token model
 
@@ -161,6 +165,9 @@ CommandRegistry.registerCommand(name, description[, options])
 
 A "reaction" (opportunity attack…) is therefore not a kernel module: it is a
 Behavior a game system attaches to tokens. No hardcoded listeners.
+
+When a token is removed, the platform despawns its bound non-player entity
+(figurine lifecycle).
 
 ### Token lifecycle events
 

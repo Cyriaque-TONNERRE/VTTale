@@ -142,7 +142,11 @@ CommandRegistry.registerCommand(name, description[, options])
 → réponses via PlatformBroadcastEvent (CONSOLE ou PlayerRef)
 ```
 
-- `/clone [joueur]` — crée une figurine statique portant le skin du joueur (un seul clone par joueur) ; `/unclone [joueur]` — la supprime (module `clone`, token taggé `clone`).
+Commandes joueur fournies par les modules intégrés :
+
+- `/clone [joueur]` — crée une figurine statique portant le skin du joueur
+  (un seul clone par joueur) ; `/unclone [joueur]` — la supprime
+  (module `clone`, token taggé `clone`).
 
 ## Modèle token
 
@@ -161,6 +165,9 @@ CommandRegistry.registerCommand(name, description[, options])
 
 Une « réaction » (opportunity attack…) n'est donc pas un module du noyau :
 c'est un Behavior qu'un système de jeu attache aux tokens. Aucun listener figé.
+
+Quand un token est supprimé, le platform despawn son entité liée non-joueur
+(cycle de vie des figurines).
 
 ### Événements de cycle de vie token
 

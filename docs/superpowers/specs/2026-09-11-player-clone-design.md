@@ -39,7 +39,7 @@ par le platform — le même découpage que `DiceService`.
 | Déclencheur | `/clone [joueur]` : sans argument, chaque joueur clone son propre personnage ; avec argument, le clone d'un autre joueur en ligne |
 | Comportement | Figurine statique : le clone apparaît au modèle du joueur puis vit sa vie, dissocié ; il se déplace ensuite via le système de tokens (`TokenUpdatedEvent`) |
 | Unicité | **Un seul clone par joueur source** : si un clone existe déjà (requête registry : owner + tag `clone`), `/clone` est un no-op avec message |
-| Suppression | `/unclone [joueur]` : despawn de l'entité (`despawnEntityForToken`, existant) + `TokenRegistry.remove(token)` |
+| Suppression | `/unclone [joueur]` : le clone est retrouvé par résolution en ligne du joueur, ou par nom exact de token `"<joueur> (clone)"` si la source est hors ligne ; `TokenRegistry.remove(token)` → le binder despawn l'entité liée sur `TokenRemovedEvent` |
 | Source de vérité | Le token, pas l'entité : l'entité n'est que l'avatar visuel du token |
 | Ordre spawn/token | Le service spawn **d'abord** ; le token n'est créé que si le spawn réussit — pas de token orphelin |
 | Cloisonnement | Interface `PlayerCloneService` définie dans `module/clone`, implémentée par `HytaleTokenBinder` (platform). `PlayerCloneModule.requires() = {TokenRegistry, PlayerCloneService}` : le registry park le module jusqu'à l'enable du binder, l'ordre de déclaration dans `setup()` ne compte pas |
@@ -114,6 +114,7 @@ existe déjà et couvre `/unclone`.
 | Joueur sans `PlayerSkinComponent` | Erreur (ne devrait pas arriver) |
 | Échec du spawn (future exceptionnel) | Erreur, **rien n'est créé** |
 | `/unclone` sans clone existant | Message, rien à faire |
+| Token supprimé | Le binder despawn réactivement l'entité liée non-joueur (`TokenRemovedEvent`) |
 
 Toutes les réponses passent par `SendMessageEvent` (pattern dice). Le bus est
 synchronisé : pas de course entre le check 1-max et la création du token.
